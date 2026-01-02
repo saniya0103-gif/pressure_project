@@ -2,9 +2,10 @@ import sqlite3
 import time
 import random
 import sys
+from upload1 import upload_status  # import helper function
 
 sys.stdout.reconfigure(encoding='utf-8')
-DB_PATH = r"C:\SQL_db\project.db"
+DB_PATH = "project.db"  # database will be created in the same folder as thee.py
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
 
@@ -61,6 +62,9 @@ while True:
             f"Time:{time.strftime('%Y-%m-%d %H:%M:%S')}",
             flush=True
         )
+
+        # Call from uploading status .
+        upload_status()
     else:
         print("No significant change, skipping...", flush=True)
 
