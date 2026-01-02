@@ -1,0 +1,4 @@
+VASP/
+backup_old/
+project.db
+__pycache__/
