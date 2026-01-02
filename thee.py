@@ -2,7 +2,7 @@ import sqlite3
 import time
 import random
 import sys
-from upload1 import upload_status  # import helper function
+#from upload1 import upload_status  # import helper function
 
 sys.stdout.reconfigure(encoding='utf-8')
 DB_PATH = "project.db"  # database will be created in the same folder as thee.py
@@ -64,7 +64,7 @@ while True:
         )
 
         # Call from uploading status .
-        upload_status()
+        #upload_status()
     else:
         print("No significant change, skipping...", flush=True)
 

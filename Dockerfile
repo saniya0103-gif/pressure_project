@@ -1,7 +1,10 @@
-FROM python:3.11-slim
+FROM python:3.11
 
 WORKDIR /app
 
-COPY thee.py /app/
+COPY . .
 
-CMD ["python3", "thee.py"]
+# If you have requirements.txt, uncomment:
+# RUN pip install --no-cache-dir -r requirements.txt
+
+CMD ["python", "thee.py"]
