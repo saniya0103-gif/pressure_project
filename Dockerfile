@@ -7,4 +7,5 @@ COPY . .
 # If you have requirements.txt, uncomment:
 # RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["python", "thee.py"]
+CMD ["python", "conversion.py"]
+
