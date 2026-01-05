@@ -68,4 +68,4 @@ while True:
     else:
         print("No significant change, skipping...", flush=True)
 
-    time.sleep(1)
+    time.sleep(20)
