@@ -3,4 +3,5 @@ backup_old/
 project.db
 __pycache__/
 pressure_project/
+network_monitor.db
 
