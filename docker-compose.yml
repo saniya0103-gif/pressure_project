@@ -20,5 +20,5 @@ services:
     volumes:
       - .:/app
     working_dir: /app
-    command: python network.py
+    command: python -u network.py
 
