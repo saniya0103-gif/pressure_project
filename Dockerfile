@@ -3,7 +3,7 @@ FROM python:3.13-slim
 
 # Install dependencies for I2C + SQLite
 RUN apt-get update && \
-    apt-get install -y python3-smbus i2c-tools libgpiod2 && \
+    apt-get install -y python3-smbus i2c-tools libgpiod-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Set working directory
