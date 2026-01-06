@@ -3,4 +3,4 @@ pandas
 flask
 adafruit-blinka
 adafruit-circuitpython-ads1x15
-lgpio
+numpy

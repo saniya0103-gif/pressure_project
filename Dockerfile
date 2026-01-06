@@ -7,6 +7,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 #Install system dependencies and build tools
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+    build-essential \
+    libffi-dev \
+    python3-dev \
     git \
     make \
     gcc \
