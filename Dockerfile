@@ -21,11 +21,10 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 #Clone and build lgpio library
-RUN git clone https://github.com/derekmolloy/lgpio.git /tmp/lgpio && \
-    cd /tmp/lgpio && \
-    make && make install && \
-    rm -rf /tmp/lgpio
-
+#RUN git clone https://github.com/derekmolloy/lgpio.git /tmp/lgpio && \
+ #   cd /tmp/lgpio && \
+  #  make && make install && \
+    # rm -rf /tmp/lgpio
 #Set working directory
 WORKDIR /app
 
