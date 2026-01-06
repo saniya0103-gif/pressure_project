@@ -3,7 +3,7 @@ FROM python:3.13-slim
 
 # Install build tools + I2C dependencies
 RUN apt-get update && \
-    apt-get install -y build-essential python3-dev python3-smbus i2c-tools libgpiod-dev && \
+    apt-get install -y python3-smbus i2c-tools libgpiod-dev gcc lgpio && \
     rm -rf /var/lib/apt/lists/*
 
 # Set working directory
