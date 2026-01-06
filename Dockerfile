@@ -1,20 +1,19 @@
-# Use Raspberry Pi Python base image
+# Use Python 3.13 slim
 FROM python:3.13-slim
 
-# Install dependencies for I2C + SQLite
+# Install build tools + I2C dependencies
 RUN apt-get update && \
-    apt-get install -y python3-smbus i2c-tools libgpiod-dev && \
+    apt-get install -y build-essential python3-dev python3-smbus i2c-tools libgpiod-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy Python code and requirements
-COPY system_convert.py /app/
-COPY requirements.txt /app/
+# Copy your code
+COPY . /app
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Entry point
+# Run only system_convert.py
 CMD ["python", "system_convert.py"]
