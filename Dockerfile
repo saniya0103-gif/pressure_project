@@ -1,9 +1,9 @@
 # Use Python 3.13 slim
 FROM python:3.13-slim
 
-# Install build tools + I2C dependencies + SWIG + git + cmake + make
+# Install build tools + I2C dependencies + SWIG + git + cmake + make + ca-certificates
 RUN apt-get update && \
-    apt-get install -y python3-smbus i2c-tools libgpiod-dev gcc swig git cmake make && \
+    apt-get install -y python3-smbus i2c-tools libgpiod-dev gcc swig git cmake make ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 # Build and install lgpio library from source
