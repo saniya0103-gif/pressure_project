@@ -7,10 +7,13 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Build and install lgpio library from source
-RUN git clone https://github.com/derekmolloy/lgpio.git /tmp/lgpio && \
-    cd /tmp/lgpio && \
+# Build and install lgpio library from source (download zip)
+RUN apt-get update && apt-get install -y unzip && \
+    curl -L -o /tmp/lgpio.zip https://github.com/derekmolloy/lgpio/archive/refs/heads/master.zip && \
+    unzip /tmp/lgpio.zip -d /tmp/ && \
+    cd /tmp/lgpio-master && \
     make && make install && \
-    rm -rf /tmp/lgpio
+    rm -rf /tmp/lgpio* 
 
 # Set working directory
 WORKDIR /app
