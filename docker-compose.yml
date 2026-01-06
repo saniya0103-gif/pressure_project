@@ -23,15 +23,3 @@ services:
       - .:/app
     working_dir: /app
     command: python -u network.py
-
-  pressure_reader:
-    build: .
-    container_name: pressure_reader
-    restart: unless-stopped
-    privileged: true
-    devices:
-      - "/dev/i2c-1:/dev/i2c-1"
-    volumes:
-      - ./project.db:/app/project.db
-    working_dir: /app
-    command: python system_convert.py
