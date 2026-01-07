@@ -10,6 +10,8 @@ from adafruit_ads1x15.analog_in import AnalogIn
 
 sys.stdout.reconfigure(encoding='utf-8')
 
+# ---------------- DATABASE SETUP ----------------
+
 DB_PATH = "project.db"
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
@@ -27,21 +29,20 @@ CREATE TABLE IF NOT EXISTS brake_pressure_log (
 """)
 conn.commit()
 
-#--I2C + ADS1115--
+# ---------------- I2C + ADS1115 SETUP ----------------
+
 i2c = busio.I2C(board.SCL, board.SDA)
 ads = ADS.ADS1115(i2c)
 
-bp_channel = AnalogIn(ads, 0)
-fp_channel = AnalogIn(ads, 1)
-cr_channel = AnalogIn(ads, 2)
-bc_channel = AnalogIn(ads, 3)
+bp_channel = AnalogIn(ads, ADS.P0)
+fp_channel = AnalogIn(ads, ADS.P1)
+cr_channel = AnalogIn(ads, ADS.P2)
+bc_channel = AnalogIn(ads, ADS.P3)
 
-# SENSOR FUNCTIONS
+# ---------------- SENSOR FUNCTIONS ----------------
 
 def generate_raw_sensors():
-    """
-    Reads raw ADC values from ADS1115
-    """
+    """Read raw ADC values from ADS1115"""
     return (
         bp_channel.value,
         fp_channel.value,
@@ -50,20 +51,18 @@ def generate_raw_sensors():
     )
 
 def convert_to_pressure(raw_value):
-    """
-    Converts ADC value to pressure (0–10 bar)
-    ADS1115 range: 0–32767
-    """
+    """Convert ADC value to pressure (0–10 bar)"""
     return round((raw_value / 32767) * 10, 2)
 
 def generate_pressures():
     raw = generate_raw_sensors()
-    return tuple(convert_to_pressure(r) for r in raw)
+    pressures = tuple(convert_to_pressure(r) for r in raw)
+    return raw, pressures
 
-# MAIN LOOP 
+# ---------------- MAIN LOOP ----------------
 
 while True:
-    new_pressures = generate_pressures()
+    raw_values, new_pressures = generate_pressures()
 
     cursor.execute("""
         SELECT bp_pressure, fp_pressure, cr_pressure, bc_pressure
@@ -82,8 +81,12 @@ while True:
         conn.commit()
 
         print(
-            f"Inserted -> BP:{new_pressures[0]} | FP:{new_pressures[1]} | "
-            f"CR:{new_pressures[2]} | BC:{new_pressures[3]} | "
+            f"RAW -> BP:{raw_values[0]} | FP:{raw_values[1]} | "
+            f"CR:{raw_values[2]} | BC:{raw_values[3]}\n"
+            f"PRESSURE -> BP:{new_pressures[0]} bar | "
+            f"FP:{new_pressures[1]} bar | "
+            f"CR:{new_pressures[2]} bar | "
+            f"BC:{new_pressures[3]} bar | "
             f"Time:{time.strftime('%Y-%m-%d %H:%M:%S')}",
             flush=True
         )
