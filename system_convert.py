@@ -34,10 +34,10 @@ conn.commit()
 i2c = busio.I2C(board.SCL, board.SDA)
 ads = ADS.ADS1115(i2c)
 
-bp_channel = AnalogIn(ads, ADS.P0)
-fp_channel = AnalogIn(ads, ADS.P1)
-cr_channel = AnalogIn(ads, ADS.P2)
-bc_channel = AnalogIn(ads, ADS.P3)
+bp_channel = AnalogIn(ads, 0)
+fp_channel = AnalogIn(ads, 1)
+cr_channel = AnalogIn(ads, 2)
+bc_channel = AnalogIn(ads, 3)
 
 # ---------------- SENSOR FUNCTIONS ----------------
 
