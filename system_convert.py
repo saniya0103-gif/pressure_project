@@ -11,6 +11,7 @@ import adafruit_ads1x15.ads1115 as ADS
 from adafruit_ads1x15.analog_in import AnalogIn
 
 sys.stdout.reconfigure(encoding='utf-8')
+DB_PATH = "project.db"
 
 # ---------------- DATABASE SETUP
 conn = sqlite3.connect(DB_PATH)
