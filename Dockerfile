@@ -30,3 +30,5 @@ COPY . .
 
 # Default command to run your script
 CMD ["python", "system_convert.py"]
+# Alternative command to run the upload script
+CMD ["python", "system_upload.py"]

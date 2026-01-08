@@ -34,3 +34,12 @@ pressure_reader:
   volumes:
     - ./project.db:/app/project.db
   working_dir: /app
+
+  system_upload:
+    build: .
+    container_name: system_upload_container
+    command: python system_upload.py
+    volumes:
+      - ./data:/data
+    working_dir: /app
+    restart: unless-stopped
