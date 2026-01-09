@@ -1,46 +1,49 @@
 import sqlite3
 import time
 
-DB_PATH = "project.db"   # mounted volume path inside container
+DB_PATH = "project.db"
+time.sleep(10)
 
-time.sleep(10)  # wait for the database to be ready
-
+# Connect to SQLite
 conn = sqlite3.connect(DB_PATH)
-conn.row_factory = sqlite3.Row
-cur = conn.cursor()
+conn.row_factory = sqlite3.Row  # So we can use row["column_name"]
+cursor = conn.cursor()
 
+# Dummy upload function (replace with real API call)
 def upload_to_app(row):
-    print(
-        f"Uploading -> "
-        f"ID:{row['id']} | "
-        f"Time:{row['created_at']} | "
-        f"BP:{row['bp']} | "
-        f"BC:{row['bc']} | "
-        f"CR:{row['cr']} | "
-        f"FP:{row['fp']} | "
-        f"Uploaded:{row['uploaded']}"
-    )
-    time.sleep(1)
-    return True
+    try:
+        print(
+            f"Uploading -> BP:{row['bp_pressure']} | FP:{row['fp_pressure']} | "
+            f"CR:{row['cr_pressure']} | BC:{row['bc_pressure']} | Time:{row['created_at']}"
+        )
+        # Simulate successful upload
+        return True
+    except Exception as e:
+        print("Upload failed:", e)
+        return False
 
 while True:
-    cur.execute("""
+    # Select only rows that are not uploaded yet
+    cursor.execute("""
         SELECT * FROM brake_pressure_log
         WHERE uploaded = 0
         ORDER BY created_at ASC
         LIMIT 1
     """)
-    row = cur.fetchone()
+    row = cursor.fetchone()
 
     if row:
-        if upload_to_app(row):
-            cur.execute(
-                "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
-                (row['id'],)
-            )
+        success = upload_to_app(row)
+        if success:
+            # Mark row as uploaded
+            cursor.execute("""
+                UPDATE brake_pressure_log
+                SET uploaded = 1
+                WHERE id = ?
+            """, (row["id"],))
             conn.commit()
-            print(f"Row {row['id']} marked uploaded (1)")
+            print("Uploaded and marked as done ✅")
     else:
-        print("No data to upload")
-
-    time.sleep(10)
+        print("No pending rows to upload.")
+    
+    time.sleep(5)
