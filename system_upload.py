@@ -1,6 +1,25 @@
 import sqlite3
 import time
 
+# ------------------ AWS MQTT CONNECTION ------------------
+ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
+CLIENT_ID = "BrakePressurePi"
+TOPIC = "brake/pressure"
+
+mqtt_connection = mqtt_connection_builder.mtls_from_path(
+    endpoint=ENDPOINT,
+    cert_filepath="Brake_Pressure_sensor.cert.pem",
+    pri_key_filepath="Brake_Pressure_sensor.private.key",
+    client_id=CLIENT_ID,
+    ca_filepath="AmazonRootCA1.pem",
+    clean_session=False,
+    keep_alive_secs=30
+)
+
+mqtt_connection.connect().result()
+print("Connected to AWS IoT Core")
+
+# ------------------ DATABASE SETUP ------------------
 DB_PATH = "project.db"
 time.sleep(10)
 
