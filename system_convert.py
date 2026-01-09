@@ -1,19 +1,13 @@
 import sqlite3
 import time
 import sys
-import json
-#import paho.mqtt.client as mqtt
 
-# ADS1115 imports
-import board
-import busio
-import adafruit_ads1x15.ads1115 as ADS
-from adafruit_ads1x15.analog_in import AnalogIn
-
+# ---------------- ENCODING ----------------
 sys.stdout.reconfigure(encoding='utf-8')
+
 DB_PATH = "project.db"
 
-# ---------------- DATABASE SETUP
+# ---------------- DATABASE SETUP ----------------
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
 
@@ -30,24 +24,40 @@ CREATE TABLE IF NOT EXISTS brake_pressure_log (
 """)
 conn.commit()
 
-# ---------------- I2C + ADS1115 SETUP 
-i2c = busio.I2C(board.SCL, board.SDA)
-ads = ADS.ADS1115(i2c)
+# ---------------- TRY ADS1115 SETUP ----------------
+ADS_AVAILABLE = True
 
-# ---------------- ADC CHANNEL SETUP ----------------
-bp_channel = AnalogIn(ads, 0)
-fp_channel = AnalogIn(ads, 1)
-cr_channel = AnalogIn(ads, 2)
-bc_channel = AnalogIn(ads, 3)
+try:
+    import board
+    import busio
+    import adafruit_ads1x15.ads1115 as ADS
+    from adafruit_ads1x15.analog_in import AnalogIn
+
+    i2c = busio.I2C(board.SCL, board.SDA)
+    ads = ADS.ADS1115(i2c)
+
+    bp_channel = AnalogIn(ads, 0)
+    fp_channel = AnalogIn(ads, 1)
+    cr_channel = AnalogIn(ads, 2)
+    bc_channel = AnalogIn(ads, 3)
+
+except Exception as e:
+    ADS_AVAILABLE = False
+    print("⚠ ADS1115 not detected, running in SAFE MODE")
+    print(e)
 
 # ---------------- SENSOR FUNCTIONS ----------------
 def generate_raw_sensors():
-    return (
-        bp_channel.value,
-        fp_channel.value,
-        cr_channel.value,
-        bc_channel.value
-    )
+    if ADS_AVAILABLE:
+        return (
+            bp_channel.value,
+            fp_channel.value,
+            cr_channel.value,
+            bc_channel.value
+        )
+    else:
+        # Safe fallback values (no logic change)
+        return (0, 0, 0, 0)
 
 def convert_to_pressure(raw_value):
     return round((raw_value / 32767) * 10, 2)
