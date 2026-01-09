@@ -2,7 +2,7 @@ import sqlite3
 import time
 import sys
 
-# ENCODING FIX FOR PRINTING UNICODE IN WINDOWS TERMINAL
+# ---------------- ENCODING SETUP ----------------
 sys.stdout.reconfigure(encoding='utf-8')
 
 DB_PATH = "project.db"
@@ -41,19 +41,15 @@ try:
     ads.gain = 1
 
     # ADS1115 Channels
-    bp_channel = AnalogIn(ads, ADS.P0)
-    fp_channel = AnalogIn(ads, ADS.P1)
-    cr_channel = AnalogIn(ads, ADS.P2)
-    bc_channel = AnalogIn(ads, ADS.P3)
+    bp_channel = AnalogIn(ads, 0)
+    fp_channel = AnalogIn(ads, 1)
+    cr_channel = AnalogIn(ads, 2)
+    bc_channel = AnalogIn(ads, P3)
 
-    print("ADS1115 detected and initialized using I2C")
-
-except Exception as e:
+except Exception:
     ADS_AVAILABLE = False
-    print("⚠️ ADS1115 NOT detected — running in SAFE MODE")
-    print("Reason:", e)
 
-# SENSOR FUNCTIONS
+# ---------------- SENSOR FUNCTIONS 
 def read_raw_values():
     if ADS_AVAILABLE:
         return (
@@ -63,10 +59,10 @@ def read_raw_values():
             bc_channel.value
         )
     else:
-        return (0, 0, 0, 0)
+        return (0, 0, 0, 0)  
 
 def convert_to_pressure(raw):
-    # Example: map ADC to 0–10 bar
+    # Convert raw ADC value to pressure (0–10 bar example)
     return round((raw / 32767) * 10, 2)
 
 def get_pressures():
@@ -75,7 +71,7 @@ def get_pressures():
     return raw, pressures
 
 # ---------------- MAIN LOOP ----------------
-print("\n System started... Logging data every 20 seconds\n")
+print("\nSystem started... Logging data every 20 seconds\n")
 
 while True:
     raw_values, pressures = get_pressures()
@@ -96,18 +92,17 @@ while True:
         """, pressures)
         conn.commit()
 
-        print(
-            f"RAW VALUES\n"
-            f"BP:{raw_values[0]} | FP:{raw_values[1]} | "
-            f"CR:{raw_values[2]} | BC:{raw_values[3]}\n"
-            f"PRESSURE VALUES\n"
-            f"BP:{pressures[0]} bar | FP:{pressures[1]} bar | "
-            f"CR:{pressures[2]} bar | BC:{pressures[3]} bar\n"
-            f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-            "---------------------------------------------",
-            flush=True
-        )
-    else:
-        print("No significant change — skipping insert...", flush=True)
+    # Only print RAW and PRESSURE values
+    print(
+        f"RAW VALUES\n"
+        f"BP:{raw_values[0]} | FP:{raw_values[1]} | "
+        f"CR:{raw_values[2]} | BC:{raw_values[3]}\n"
+        f"PRESSURE VALUES\n"
+        f"BP:{pressures[0]} bar | FP:{pressures[1]} bar | "
+        f"CR:{pressures[2]} bar | BC:{pressures[3]} bar\n"
+        f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        "---------------------------------------------",
+        flush=True
+    )
 
     time.sleep(20)
