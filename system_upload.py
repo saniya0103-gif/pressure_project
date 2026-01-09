@@ -3,12 +3,23 @@ import time
 
 DB_PATH = "project.db"   # mounted volume path inside container
 
+time.sleep(10)  # wait for the database to be ready
+
 conn = sqlite3.connect(DB_PATH)
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
 def upload_to_app(row):
-    print(f"Uploading -> ID:{row['id']} Time:{row['created_at']}")
+    print(
+        f"Uploading -> "
+        f"ID:{row['id']} | "
+        f"Time:{row['created_at']} | "
+        f"BP:{row['bp']} | "
+        f"BC:{row['bc']} | "
+        f"CR:{row['cr']} | "
+        f"FP:{row['fp']} | "
+        f"Uploaded:{row['uploaded']}"
+    )
     time.sleep(1)
     return True
 
@@ -32,4 +43,4 @@ while True:
     else:
         print("No data to upload")
 
-    time.sleep(2)
+    time.sleep(10)
