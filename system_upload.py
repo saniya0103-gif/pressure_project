@@ -4,22 +4,35 @@ from awsiot import mqtt_connection_builder
 from awscrt import mqtt
 
 # ------------------ AWS MQTT CONNECTION ------------------
+import os
+from awsiot import mqtt_connection_builder
+
+# ---------------- BASE DIRECTORY ----------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ---------------- CERTIFICATE PATHS ----------------
+CERT_PATH = os.path.join(BASE_DIR, "Brake_Pressure_sensor.cert.pem")
+KEY_PATH = os.path.join(BASE_DIR, "Brake_Pressure_sensor.private.key")
+CA_PATH = os.path.join(BASE_DIR, "AmazonRootCA1.pem")  # or root-CA.crt
+
+# ---------------- MQTT CONFIG ----------------
 ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 CLIENT_ID = "BrakePressurePi"
 TOPIC = "brake/pressure"
 
+# ---------------- CONNECT TO AWS IOT ----------------
 mqtt_connection = mqtt_connection_builder.mtls_from_path(
     endpoint=ENDPOINT,
-    cert_filepath="Brake_Pressure_sensor.cert.pem",
-    pri_key_filepath="Brake_Pressure_sensor.private.key",
+    cert_filepath=CERT_PATH,
+    pri_key_filepath=KEY_PATH,
     client_id=CLIENT_ID,
-    ca_filepath="AmazonRootCA1.pem",
+    ca_filepath=CA_PATH,
     clean_session=False,
     keep_alive_secs=30
 )
 
 mqtt_connection.connect().result()
-print("Connected to AWS IoT Core")
+print("✅ Connected to AWS IoT Core")
 
 # ------------------ DATABASE SETUP ------------------
 DB_PATH = "project.db"
