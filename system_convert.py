@@ -2,7 +2,7 @@ import sqlite3
 import time
 import sys
 
-# ---------------- ENCODING ----------------
+# ENCODING FIX FOR PRINTING UNICODE IN WINDOWS TERMINAL
 sys.stdout.reconfigure(encoding='utf-8')
 
 DB_PATH = "project.db"
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS brake_pressure_log (
 """)
 conn.commit()
 
-# ---------------- TRY ADS1115 SETUP ----------------
+# ---------------- ADS1115 SETUP ----------------
 ADS_AVAILABLE = True
 
 try:
@@ -33,21 +33,28 @@ try:
     import adafruit_ads1x15.ads1115 as ADS
     from adafruit_ads1x15.analog_in import AnalogIn
 
+    # Initialize I2C
     i2c = busio.I2C(board.SCL, board.SDA)
-    ads = ADS.ADS1115(i2c)
 
-    bp_channel = AnalogIn(ads, 0)
-    fp_channel = AnalogIn(ads, 1)
-    cr_channel = AnalogIn(ads, 2)
-    bc_channel = AnalogIn(ads, 3)
+    # Initialize ADS1115
+    ads = ADS.ADS1115(i2c)
+    ads.gain = 1
+
+    # ADS1115 Channels
+    bp_channel = AnalogIn(ads, ADS.P0)
+    fp_channel = AnalogIn(ads, ADS.P1)
+    cr_channel = AnalogIn(ads, ADS.P2)
+    bc_channel = AnalogIn(ads, ADS.P3)
+
+    print("ADS1115 detected and initialized using I2C")
 
 except Exception as e:
     ADS_AVAILABLE = False
-    print("⚠ ADS1115 not detected, running in SAFE MODE")
-    print(e)
+    print("⚠️ ADS1115 NOT detected — running in SAFE MODE")
+    print("Reason:", e)
 
-# ---------------- SENSOR FUNCTIONS ----------------
-def generate_raw_sensors():
+# SENSOR FUNCTIONS
+def read_raw_values():
     if ADS_AVAILABLE:
         return (
             bp_channel.value,
@@ -56,20 +63,22 @@ def generate_raw_sensors():
             bc_channel.value
         )
     else:
-        # Safe fallback values (no logic change)
         return (0, 0, 0, 0)
 
-def convert_to_pressure(raw_value):
-    return round((raw_value / 32767) * 10, 2)
+def convert_to_pressure(raw):
+    # Example: map ADC to 0–10 bar
+    return round((raw / 32767) * 10, 2)
 
-def generate_pressures():
-    raw = generate_raw_sensors()
+def get_pressures():
+    raw = read_raw_values()
     pressures = tuple(convert_to_pressure(r) for r in raw)
     return raw, pressures
 
 # ---------------- MAIN LOOP ----------------
+print("\n System started... Logging data every 20 seconds\n")
+
 while True:
-    raw_values, new_pressures = generate_pressures()
+    raw_values, pressures = get_pressures()
 
     cursor.execute("""
         SELECT bp_pressure, fp_pressure, cr_pressure, bc_pressure
@@ -79,25 +88,26 @@ while True:
     """)
     last = cursor.fetchone()
 
-    if not last or any(abs(n - l) >= 0.5 for n, l in zip(new_pressures, last)):
+    if not last or any(abs(n - l) >= 0.5 for n, l in zip(pressures, last)):
         cursor.execute("""
             INSERT INTO brake_pressure_log
             (bp_pressure, fp_pressure, cr_pressure, bc_pressure)
             VALUES (?, ?, ?, ?)
-        """, new_pressures)
+        """, pressures)
         conn.commit()
 
         print(
-            f"RAW -> BP:{raw_values[0]} | FP:{raw_values[1]} | "
+            f"RAW VALUES\n"
+            f"BP:{raw_values[0]} | FP:{raw_values[1]} | "
             f"CR:{raw_values[2]} | BC:{raw_values[3]}\n"
-            f"PRESSURE -> BP:{new_pressures[0]} bar | "
-            f"FP:{new_pressures[1]} bar | "
-            f"CR:{new_pressures[2]} bar | "
-            f"BC:{new_pressures[3]} bar | "
-            f"Time:{time.strftime('%Y-%m-%d %H:%M:%S')}",
+            f"PRESSURE VALUES\n"
+            f"BP:{pressures[0]} bar | FP:{pressures[1]} bar | "
+            f"CR:{pressures[2]} bar | BC:{pressures[3]} bar\n"
+            f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            "---------------------------------------------",
             flush=True
         )
     else:
-        print("No significant change, skipping...", flush=True)
+        print("No significant change — skipping insert...", flush=True)
 
     time.sleep(20)
