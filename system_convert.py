@@ -2,7 +2,7 @@ import sqlite3
 import time
 import sys
 import json
-import paho.mqtt.client as mqtt
+#import paho.mqtt.client as mqtt
 
 # ADS1115 imports
 import board
@@ -33,27 +33,6 @@ conn.commit()
 # ---------------- I2C + ADS1115 SETUP 
 i2c = busio.I2C(board.SCL, board.SDA)
 ads = ADS.ADS1115(i2c)
-
-# ---------------- MQTT SETUP ----------------
-MQTT_BROKER = "b32b74b949854cbca498f48f9627cb39.s1.eu.hivemq.cloud"
-MQTT_PORT = 8883
-MQTT_TOPIC = "project/brake_pressure"
-
-mqtt_client = mqtt.Client(
-    client_id="RaspberryPi_Pressure",
-    protocol=mqtt.MQTTv311
-)
-
-mqtt_client.username_pw_set(
-    "Saniya_p",      # from HiveMQ Access Management
-    "Saniya@9786"       # from HiveMQ Access Management
-)
-
-mqtt_client.tls_set()
-result = mqtt_client.connect(MQTT_BROKER, MQTT_PORT)
-print("MQTT connect result:", result)
-
-mqtt_client.loop_start()
 
 # ---------------- ADC CHANNEL SETUP ----------------
 bp_channel = AnalogIn(ads, 0)
@@ -97,17 +76,6 @@ while True:
             VALUES (?, ?, ?, ?)
         """, new_pressures)
         conn.commit()
-
-        mqtt_data = {
-            "bp": new_pressures[0],
-            "fp": new_pressures[1],
-            "cr": new_pressures[2],
-            "bc": new_pressures[3],
-            "time": time.strftime("%Y-%m-%d %H:%M:%S")
-        }
-
-        mqtt_client.publish(MQTT_TOPIC, json.dumps(mqtt_data), qos=1)
-        print("MQTT Published:", mqtt_data)
 
         print(
             f"RAW -> BP:{raw_values[0]} | FP:{raw_values[1]} | "
