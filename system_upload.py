@@ -2,6 +2,7 @@ import sqlite3
 import time
 from awsiot import mqtt_connection_builder
 from awscrt import mqtt
+import json
 
 # ------------------ AWS MQTT CONNECTION ------------------
 import os
