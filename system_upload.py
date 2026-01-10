@@ -10,29 +10,41 @@ from awscrt import mqtt
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------- CERTIFICATE PATHS ----------------
-CERT_PATH = os.path.join(BASE_DIR, "Brake_Pressure_sensor.cert.pem")
-KEY_PATH = os.path.join(BASE_DIR, "Brake_Pressure_sensor.private.key")
-CA_PATH = os.path.join(BASE_DIR, "AmazonRootCA1.pem")
+CERT_PATH = os.path.join(BASE_DIR, "aws_iot_certs/device.cert.pem")
+KEY_PATH  = os.path.join(BASE_DIR, "aws_iot_certs/device.private.key")
+CA_PATH   = os.path.join(BASE_DIR, "aws_iot_certs/AmazonRootCA1.pem")
 
 # ---------------- MQTT CONFIG ----------------
-ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
+ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 CLIENT_ID = "BrakePressurePi"
-TOPIC = "brake/pressure"
+TOPIC     = "brake/pressure"
 
 # ---------------- CONNECT TO AWS IOT ----------------
-mqtt_connection = mqtt_connection_builder.mtls_from_path(
-    endpoint=ENDPOINT,
-    cert_filepath=CERT_PATH,
-    pri_key_filepath=KEY_PATH,
-    ca_filepath=CA_PATH,
-    client_id=CLIENT_ID,
-    clean_session=False,
-    keep_alive_secs=30
-)
+def connect_mqtt():
+    try:
+        mqtt_connection = mqtt_connection_builder.mtls_from_path(
+            endpoint=ENDPOINT,
+            cert_filepath=CERT_PATH,
+            pri_key_filepath=KEY_PATH,
+            ca_filepath=CA_PATH,
+            client_id=CLIENT_ID,
+            clean_session=False,
+            keep_alive_secs=30
+        )
+        print("Connecting to AWS IoT Core...")
+        mqtt_connection.connect().result()
+        print("✅ Connected to AWS IoT Core")
+        return mqtt_connection
+    except Exception as e:
+        print("❌ MQTT connection failed:", e)
+        return None
 
-print("Connecting to AWS IoT Core...")
-mqtt_connection.connect().result()
-print("✅ Connected to AWS IoT Core")
+mqtt_connection = None
+while mqtt_connection is None:
+    mqtt_connection = connect_mqtt()
+    if mqtt_connection is None:
+        print("Retrying connection in 5 seconds...")
+        time.sleep(5)
 
 # ------------------ DATABASE SETUP ------------------
 DB_PATH = "project.db"
