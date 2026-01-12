@@ -22,13 +22,11 @@ RUN pip install --no-cache-dir lgpio adafruit-blinka
 WORKDIR /app
 
 # Copy and install project Python requirements
-COPY requirements.txt .
+COPY requirements.txt . 
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project files
+# Copy project files and AWS certificates
 COPY . .
 
-# Default command to run your script
-CMD ["python", "system_convert.py"]
-# Alternative command to run the upload script
-CMD ["python", "system_upload.py"]
+# Use bash to run both scripts in background
+CMD ["bash", "-c", "python system_convert.py & python system_upload.py"]
