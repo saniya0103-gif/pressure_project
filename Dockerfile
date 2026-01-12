@@ -4,16 +4,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    python3-smbus \
-    i2c-tools \
-    libgpiod-dev \
-    swig \
-    python3-dev \
-    build-essential \
-    ca-certificates && \
+    ca-certificates \
+    sqlite3 && \
     rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir lgpio adafruit-blinka
 
 WORKDIR /app
 
@@ -21,5 +14,4 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
-
-CMD ["python", "system_convert.py"]
+CMD ["python", "system_upload.py"]

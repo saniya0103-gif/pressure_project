@@ -1,41 +1,22 @@
-#version: "3.9"
+version: "3.9"
+
 services:
-  thee_app:
+  convert_app:
     build: .
-    container_name: conversion_app
+    container_name: pressure_convert
+    command: python system_convert.py
+    privileged: true
+    devices:
+      - "/dev/i2c-1:/dev/i2c-1"
     volumes:
-      - .:/app
-    working_dir: /app
-    command: python conversion.py
+      - ./project.db:/app/project.db
+    restart: always
 
   uploader_app:
     build: .
-    container_name: uploader_app
-    volumes:
-      - .:/app
-    working_dir: /app
-    command: python upload1.py
-
-  network_app:
-    build: .
-    container_name: network_app
-    volumes:
-      - .:/app
-    working_dir: /app
-    command: python -u network.py
-    
-  convert:
-    build: .
-    container_name: convert_container
-    command: python system_convert.py
-    volumes:
-      - .:/app
-    restart: unless-stopped
-
-  upload:
-    build: .
-    container_name: upload_container
+    container_name: pressure_uploader
     command: python system_upload.py
     volumes:
-      - .:/app
-    restart: unless-stopped
+      - ./project.db:/app/project.db
+      - ./aws_iot:/app/aws_iot:ro
+    restart: always
