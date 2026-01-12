@@ -1,20 +1,39 @@
-from Adafruit_IO import MQTTClient
+from awscrt import io, mqtt
+from awsiot import mqtt_connection_builder
+import time
 
-ADAFRUIT_IO_USERNAME = "your_username"
-ADAFRUIT_IO_KEY = "your_aio_key"  # Get from Adafruit IO settings
-FEED_ID = "brake_pressure"
+# ---------------- AWS IoT Endpoint ----------------
+ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"  # replace with your actual endpoint
+CLIENT_ID = "Raspberry"
 
-def connected(client):
-    print("Connected to Adafruit IO")
+# ---------------- Certificate Paths ----------------
+PATH = "/home/pi_123/aws_iot/"
 
-def disconnected(client):
-    print("Disconnected from Adafruit IO")
+CERT = PATH + "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"
+KEY = PATH + "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
+ROOT = PATH + "AmazonRootCA1.pem"
 
-client = MQTTClient(ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY)
-client.on_connect = connected
-client.on_disconnect = disconnected
-client.connect()
-client.loop_background()
+# ---------------- Build MQTT Connection ----------------
+mqtt_connection = mqtt_connection_builder.mtls_from_path(
+    endpoint=ENDPOINT,
+    cert_filepath=CERT,
+    pri_key_filepath=KEY,
+    client_id=CLIENT_ID,
+    ca_filepath=ROOT,
+    keep_alive_secs=60
+)
 
-# Send data
-client.publish(FEED_ID, 5.4)
+print("Connecting to AWS IoT...")
+connect_future = mqtt_connection.connect()
+connect_future.result()
+print("Connected!")
+
+# ---------------- Publish Test Message ----------------
+topic = "sdk/test/python"
+message = "Hello from Raspberry Pi!"
+mqtt_connection.publish(topic=topic, payload=message, qos=mqtt.QoS.AT_LEAST_ONCE)
+print(f"Published message to topic '{topic}': {message}")
+
+# ---------------- Disconnect ----------------
+mqtt_connection.disconnect()
+print("Disconnected")
