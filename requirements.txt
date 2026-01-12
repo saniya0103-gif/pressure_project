@@ -6,3 +6,4 @@ adafruit-circuitpython-ads1x15
 numpy
 awscrt
 awsiotsdk
+boto3
