@@ -7,16 +7,16 @@ from awsiot import mqtt_connection_builder
 from awscrt import mqtt
 
 # ---------------- BASE DIRECTORY ----------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = "/home/pi_123/aws_iot"   # <-- updated path
 
 # ---------------- CERTIFICATE PATHS ----------------
-CERT_PATH = os.path.join(BASE_DIR, "aws_iot_certs/device.cert.pem")
-KEY_PATH  = os.path.join(BASE_DIR, "aws_iot_certs/device.private.key")
-CA_PATH   = os.path.join(BASE_DIR, "aws_iot_certs/AmazonRootCA1.pem")
+CERT_PATH = os.path.join(BASE_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt")
+KEY_PATH  = os.path.join(BASE_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key")
+CA_PATH   = os.path.join(BASE_DIR, "AmazonRootCA1.pem")
 
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
-CLIENT_ID = "BrakePressurePi"
+CLIENT_ID = "Raspberry"
 TOPIC     = "brake/pressure"
 
 # ---------------- CONNECT TO AWS IOT ----------------
@@ -36,7 +36,7 @@ def connect_mqtt():
         print("✅ Connected to AWS IoT Core")
         return mqtt_connection
     except Exception as e:
-        print("❌ MQTT connection failed:", e)
+        print(" MQTT connection failed:", e)
         return None
 
 mqtt_connection = None
@@ -71,7 +71,7 @@ def upload_to_app(row):
             qos=mqtt.QoS.AT_LEAST_ONCE
         )
 
-        print("📤 Sent to AWS IoT:", payload)
+        print("Sent to AWS IoT:", payload)
         return True
 
     except Exception as e:
