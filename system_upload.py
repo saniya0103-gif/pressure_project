@@ -3,8 +3,8 @@ import time
 import json
 import os
 
-from awsiotsdk import mqtt_connection_builder
 from awscrt import mqtt
+from awsiotsdk import mqtt_connection_builder
 
 # ---------------- BASE DIRECTORY ----------------
 BASE_DIR = "/home/pi_123/aws_iot"   # <-- updated path
