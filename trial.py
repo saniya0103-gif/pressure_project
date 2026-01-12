@@ -3,8 +3,8 @@ from awsiot import mqtt_connection_builder
 import time
 
 # ---------------- AWS IoT Settings ----------------
-ENDPOINT = "YOUR_AWS_IOT_ENDPOINT_HERE"  # replace with your AWS IoT endpoint
-CLIENT_ID = "RaspberryPi_001"
+ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"  # replace with your AWS IoT endpoint
+CLIENT_ID = "Raspberry"
 TOPIC = "sdk/test/python"
 
 # ---------------- Certificate Paths ----------------
