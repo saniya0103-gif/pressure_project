@@ -1,9 +1,10 @@
+awscrt==0.31.0
+awsiotsdk==0.15.4
+boto3
 requests
 pandas
 flask
 adafruit-blinka
 adafruit-circuitpython-ads1x15
 numpy
-awscrt
-awsiotsdk
-boto3
+RPi.GPIO
