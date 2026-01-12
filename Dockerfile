@@ -26,7 +26,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy project files and AWS certificates
-COPY . .
+#COPY . .
+# Copy AWS IoT certificates
+COPY aws_iot /app/aws_iot
 
 # Use bash to run both scripts in background
 CMD ["bash", "-c", "python system_convert.py & python system_upload.py"]
