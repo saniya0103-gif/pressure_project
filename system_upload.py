@@ -3,7 +3,7 @@ import time
 import json
 import os
 
-from awsiot import mqtt_connection_builder
+from awsiotsdk import mqtt_connection_builder
 from awscrt import mqtt
 
 # ---------------- BASE DIRECTORY ----------------
