@@ -10,9 +10,9 @@ from awscrt import mqtt
 BASE_DIR = "/home/pi_123/aws_iot"   # <-- updated path
 
 # ---------------- CERTIFICATE PATHS ----------------
-CERT_PATH = os.path.join(BASE_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt")
-KEY_PATH  = os.path.join(BASE_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key")
-CA_PATH   = os.path.join(BASE_DIR, "AmazonRootCA1.pem")
+CERT_PATH = "/app/aws_iot/device.cert.pem"
+KEY_PATH  = "/app/aws_iot/device.private.key"
+CA_PATH   = "/app/aws_iot/AmazonRootCA1.pem"
 
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
