@@ -1,5 +1,3 @@
-#!/home/pi_123/data/src/pressure_project/venv311/bin/python
-
 import sqlite3
 import time
 import json
