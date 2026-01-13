@@ -1,14 +1,12 @@
-#!/usr/bin/env python3
-# system_upload.py for Docker
-
 import sqlite3
 import time
 import json
 import ssl
 import paho.mqtt.client as mqtt
-import os
 
-# ---------------- CERTIFICATE PATHS ----------------
+# ---------------- PATHS (INSIDE DOCKER) ----------------
+DB_PATH = "/app/project.db"
+
 CERT_PATH = "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"
 KEY_PATH  = "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
 CA_PATH   = "/app/aws_iot/AmazonRootCA1.pem"
@@ -16,13 +14,12 @@ CA_PATH   = "/app/aws_iot/AmazonRootCA1.pem"
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 PORT      = 8883
-CLIENT_ID = "Raspberry"
+CLIENT_ID = "pressure-uploader"
 TOPIC     = "brake/pressure"
 
 # ---------------- MQTT CALLBACKS ----------------
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        print("Connecting to AWS IoT Core...")
         print("✅ Connected to AWS IoT Core")
     else:
         print("❌ MQTT connection failed, RC =", rc)
@@ -30,86 +27,74 @@ def on_connect(client, userdata, flags, rc):
 def on_publish(client, userdata, mid):
     print("📤 Data published to AWS IoT")
 
-# ---------------- CONNECT TO AWS IOT ----------------
+# ---------------- MQTT CONNECT ----------------
 def connect_mqtt():
+    client = mqtt.Client(client_id=CLIENT_ID)
+    client.on_connect = on_connect
+    client.on_publish = on_publish
+
+    client.tls_set(
+        ca_certs=CA_PATH,
+        certfile=CERT_PATH,
+        keyfile=KEY_PATH,
+        tls_version=ssl.PROTOCOL_TLSv1_2
+    )
+
+    client.connect(ENDPOINT, PORT, keepalive=60)
+    client.loop_start()
+    return client
+
+# ---------------- WAIT FOR MQTT ----------------
+mqtt_client = None
+while mqtt_client is None:
     try:
-        client = mqtt.Client(client_id=CLIENT_ID)
-        client.on_connect = on_connect
-        client.on_publish = on_publish
-
-        # TLS configuration
-        client.tls_set(
-            ca_certs=CA_PATH,
-            certfile=CERT_PATH,
-            keyfile=KEY_PATH,
-            tls_version=ssl.PROTOCOL_TLSv1_2
-        )
-
-        # Connect
-        client.connect(ENDPOINT, PORT, keepalive=60)
-        client.loop_start()
-        return client
-
+        mqtt_client = connect_mqtt()
     except Exception as e:
-        print("MQTT connection failed:", e)
-        return None
+        print("MQTT error:", e)
+        time.sleep(5)
 
-# ---------------- DATABASE SETUP ----------------
-DB_PATH = "/app/project.db"   # keep database named project.db
-if not os.path.exists(DB_PATH):
-    print("❌ Database not found at", DB_PATH)
-    exit(1)
-
+# ---------------- DATABASE ----------------
 conn = sqlite3.connect(DB_PATH)
 conn.row_factory = sqlite3.Row
 cursor = conn.cursor()
 
 # ---------------- UPLOAD FUNCTION ----------------
-def upload_to_app(row):
-    try:
-        payload = {
-            "created_at": row["created_at"],
-            "bp_pressure": row["bp_pressure"],
-            "fp_pressure": row["fp_pressure"],
-            "cr_pressure": row["cr_pressure"],
-            "bc_pressure": row["bc_pressure"],
-            "uploaded_db": row["uploaded"],
-            "aws_status": "uploaded"
-        }
-        mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-        print("Sent to AWS IoT:", payload)
-        return True
-    except Exception as e:
-        print("Upload failed:", e)
-        return False
+def upload_to_aws(row):
+    payload = {
+        "created_at": row["created_at"],
+        "bp_pressure": row["bp_pressure"],
+        "fp_pressure": row["fp_pressure"],
+        "cr_pressure": row["cr_pressure"],
+        "bc_pressure": row["bc_pressure"],
+        "db_uploaded": row["uploaded"],
+        "aws_status": "uploaded"
+    }
+
+    mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
+    print("➡️ Sent:", payload)
 
 # ---------------- MAIN LOOP ----------------
-mqtt_client = None
-while mqtt_client is None:
-    mqtt_client = connect_mqtt()
-    if mqtt_client is None:
-        print("Retrying connection in 5 seconds...")
-        time.sleep(5)
-
-print("System started... Uploading pending rows if any.")
-
 while True:
-    # Fetch rows in order of creation
-    cursor.execute("SELECT * FROM brake_pressure_log ORDER BY created_at ASC")
+    cursor.execute("""
+        SELECT * FROM brake_pressure_log
+        WHERE uploaded = 0
+        ORDER BY created_at ASC
+    """)
     rows = cursor.fetchall()
 
-    pending_found = False
+    if not rows:
+        print("No pending rows. Waiting...")
+        time.sleep(15)
+        continue
+
     for row in rows:
-        if row["uploaded"] == 0:
-            pending_found = True
-            success = upload_to_app(row)
-            if success:
-                cursor.execute("UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?", (row["id"],))
-                conn.commit()
-                print(f"Uploaded and marked as done ✅ | DB uploaded=1 | Timestamp: {row['created_at']}")
-                time.sleep(10)  # delay per row
+        upload_to_aws(row)
 
-    if not pending_found:
-        print("No pending rows to upload (all uploaded).")
+        cursor.execute(
+            "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
+            (row["id"],)
+        )
+        conn.commit()
 
-    time.sleep(10)  # check DB every 5 seconds
+        print(f"✅ Marked uploaded | {row['created_at']}")
+        time.sleep(10)

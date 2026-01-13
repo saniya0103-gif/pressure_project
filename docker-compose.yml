@@ -4,7 +4,7 @@ services:
   convert_app:
     build: .
     container_name: pressure_convert
-    command: python3 system_convert.py
+    command: python3 -u system_convert.py
     privileged: true
     devices:
       - "/dev/i2c-1:/dev/i2c-1"
