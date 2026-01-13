@@ -7,3 +7,4 @@ flask
 adafruit-blinka
 adafruit-circuitpython-ads1x15
 numpy
+paho-mqtt>=1.6.1
