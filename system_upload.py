@@ -7,7 +7,6 @@ import ssl
 import paho.mqtt.client as mqtt
 import os
 
-timesleep(10)
 # ---------------- CERTIFICATE PATHS ----------------
 CERT_PATH = "/home/pi_123/data/src/pressure_project/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"
 KEY_PATH  = "/home/pi_123/data/src/pressure_project/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
