@@ -5,21 +5,29 @@ import ssl
 import os
 import paho.mqtt.client as mqtt
 
-# ---------------- PATHS (INSIDE DOCKER) ----------------
-DB_PATH = "/app/project.db"
+# ---------------- DEBUG ----------------
+print("=== DEBUG START ===", flush=True)
+print("PWD:", os.getcwd(), flush=True)
+print("List /app:", os.listdir("/app"), flush=True)
+print("List /app/aws_iot:", os.listdir("/app/aws_iot"), flush=True)
 
-# ---------------- AWS IOT CERTIFICATES ----------------
-CA_PATH   = "/app/aws_iot/AmazonRootCA1.pem"
-CERT_PATH = "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"
-KEY_PATH  = "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
-# ---------------- PATH CHECK ----------------
-print("=== PATH CHECK START ===", flush=True)
-print("DB exists :", os.path.exists("/app/project.db"), flush=True)
-print("CA exists :", os.path.exists("/app/aws_iot/AmazonRootCA1.pem"), flush=True)
-print("CERT exists:", os.path.exists("/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"), flush=True)
-print("KEY exists :", os.path.exists("/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"), flush=True)
-print("=== PATH CHECK END ===", flush=True)
+# ---------------- PATHS ----------------
+paths = {
+    "DB": "/app/project.db",
+    "CA": "/app/aws_iot/AmazonRootCA1.pem",
+    "CERT": "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt",
+    "KEY": "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
+}
 
+for name, path in paths.items():
+    print(f"{name} exists:", os.path.exists(path), path, flush=True)
+
+print("=== DEBUG END ===", flush=True)
+
+DB_PATH   = paths["DB"]
+CA_PATH   = paths["CA"]
+CERT_PATH = paths["CERT"]
+KEY_PATH  = paths["KEY"]
 
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
@@ -27,7 +35,7 @@ PORT      = 8883
 CLIENT_ID = "Raspberry"
 TOPIC     = "brake/pressure"
 
-# ---------------- MQTT CALLBACKS ----------------
+# ---------------- CALLBACKS ----------------
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print("✅ Connected to AWS IoT Core")
@@ -35,7 +43,7 @@ def on_connect(client, userdata, flags, rc):
         print("❌ MQTT connection failed, RC =", rc)
 
 def on_publish(client, userdata, mid):
-    print("📤 Data published to AWS IoT")
+    print("📤 Data published")
 
 # ---------------- MQTT CONNECT ----------------
 def connect_mqtt():
