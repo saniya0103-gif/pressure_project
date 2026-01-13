@@ -1,3 +1,5 @@
+#!/home/pi_123/data/src/pressure_project/venv311/bin/python
+
 import sqlite3
 import time
 import json
@@ -18,6 +20,7 @@ TOPIC     = "brake/pressure"
 # ---------------- MQTT CALLBACKS ----------------
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
+        print("Connecting to AWS IoT Core...")
         print("✅ Connected to AWS IoT Core")
     else:
         print("❌ MQTT connection failed, RC =", rc)
@@ -39,7 +42,6 @@ def connect_mqtt():
             tls_version=ssl.PROTOCOL_TLSv1_2
         )
 
-        print("Connecting to AWS IoT Core...")
         client.connect(ENDPOINT, PORT, keepalive=60)
         client.loop_start()
         return client
@@ -91,23 +93,24 @@ def upload_to_app(row):
 while True:
     cursor.execute("""
         SELECT * FROM brake_pressure_log
-        WHERE uploaded = 0
         ORDER BY created_at ASC
-        LIMIT 1
     """)
-    row = cursor.fetchone()
+    rows = cursor.fetchall()
 
-    if row:
-        success = upload_to_app(row)
-        if success:
-            cursor.execute("""
-                UPDATE brake_pressure_log
-                SET uploaded = 1
-                WHERE id = ?
-            """, (row["id"],))
-            conn.commit()
-            print("Uploaded and marked as done ✅")
-    else:
-        print("No pending rows to upload.")
+    pending_found = False
+    for row in rows:
+        if row["uploaded"] == 0:
+            pending_found = True
+            success = upload_to_app(row)
+            if success:
+                cursor.execute("""
+                    UPDATE brake_pressure_log
+                    SET uploaded = 1
+                    WHERE id = ?
+                """, (row["id"],))
+                conn.commit()
+                print("Uploaded and marked as done ✅")
+    if not pending_found:
+        print("No pending rows to upload (all uploaded).")
 
     time.sleep(5)
