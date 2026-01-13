@@ -15,7 +15,7 @@ services:
   uploader_app:
     build: .
     container_name: pressure_uploader
-    command: python3 system_upload.py
+    command: python3 -u system_upload.py
     volumes:
       - ./project.db:/app/project.db
       - ./aws_iot:/app/aws_iot:ro
