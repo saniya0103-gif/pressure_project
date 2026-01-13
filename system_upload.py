@@ -6,6 +6,7 @@ import json
 import ssl
 import paho.mqtt.client as mqtt
 
+time.sleep(10)
 # ---------------- CERTIFICATE PATHS ----------------
 CERT_PATH = "/home/pi_123/data/src/pressure_project/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"
 KEY_PATH  = "/home/pi_123/data/src/pressure_project/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
@@ -113,4 +114,4 @@ while True:
     if not pending_found:
         print("No pending rows to upload (all uploaded).")
 
-    time.sleep(5)
+    time.sleep(15)
