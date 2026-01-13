@@ -12,11 +12,14 @@ DB_PATH = "/app/project.db"
 CA_PATH   = "/app/aws_iot/AmazonRootCA1.pem"
 CERT_PATH = "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"
 KEY_PATH  = "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
+# ---------------- PATH CHECK ----------------
+print("=== PATH CHECK START ===", flush=True)
+print("DB exists :", os.path.exists("/app/project.db"), flush=True)
+print("CA exists :", os.path.exists("/app/aws_iot/AmazonRootCA1.pem"), flush=True)
+print("CERT exists:", os.path.exists("/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"), flush=True)
+print("KEY exists :", os.path.exists("/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"), flush=True)
+print("=== PATH CHECK END ===", flush=True)
 
-print("DB exists:", os.path.exists(DB_PATH))
-print("CA exists:", os.path.exists(CA_PATH))
-print("CERT exists:", os.path.exists(CERT_PATH))
-print("KEY exists:", os.path.exists(KEY_PATH))
 
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
