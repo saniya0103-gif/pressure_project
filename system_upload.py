@@ -1,14 +1,10 @@
+#!/home/pi_123/data/src/pressure_project/venv311/bin/python
+
 import sqlite3
 import time
 import json
-import os
-
-from awsiotsdk import mqtt_connection_builder
-from awscrt import mqtt
-#from awsiotsdk import mqtt_connection_builder
-
-# ---------------- BASE DIRECTORY ----------------
-BASE_DIR = "/home/pi_123/aws_iot"   # <-- updated path
+import ssl
+import paho.mqtt.client as mqtt
 
 # ---------------- CERTIFICATE PATHS ----------------
 CERT_PATH = "/app/aws_iot/device.cert.pem"
@@ -17,33 +13,47 @@ CA_PATH   = "/app/aws_iot/AmazonRootCA1.pem"
 
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
+PORT      = 8883
 CLIENT_ID = "Raspberry"
 TOPIC     = "brake/pressure"
+
+# ---------------- MQTT CALLBACKS ----------------
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print("✅ Connected to AWS IoT Core")
+    else:
+        print("❌ MQTT connection failed, RC =", rc)
+
+def on_publish(client, userdata, mid):
+    print("📤 Data published to AWS IoT")
 
 # ---------------- CONNECT TO AWS IOT ----------------
 def connect_mqtt():
     try:
-        mqtt_connection = mqtt_connection_builder.mtls_from_path(
-            endpoint=ENDPOINT,
-            cert_filepath=CERT_PATH,
-            pri_key_filepath=KEY_PATH,
-            ca_filepath=CA_PATH,
-            client_id=CLIENT_ID,
-            clean_session=False,
-            keep_alive_secs=30
+        client = mqtt.Client(client_id=CLIENT_ID)
+        client.on_connect = on_connect
+        client.on_publish = on_publish
+
+        client.tls_set(
+            ca_certs=CA_PATH,
+            certfile=CERT_PATH,
+            keyfile=KEY_PATH,
+            tls_version=ssl.PROTOCOL_TLSv1_2
         )
+
         print("Connecting to AWS IoT Core...")
-        mqtt_connection.connect().result()
-        print("✅ Connected to AWS IoT Core")
-        return mqtt_connection
+        client.connect(ENDPOINT, PORT, keepalive=60)
+        client.loop_start()
+        return client
+
     except Exception as e:
-        print(" MQTT connection failed:", e)
+        print("MQTT connection failed:", e)
         return None
 
-mqtt_connection = None
-while mqtt_connection is None:
-    mqtt_connection = connect_mqtt()
-    if mqtt_connection is None:
+mqtt_client = None
+while mqtt_client is None:
+    mqtt_client = connect_mqtt()
+    if mqtt_client is None:
         print("Retrying connection in 5 seconds...")
         time.sleep(5)
 
@@ -66,10 +76,10 @@ def upload_to_app(row):
             "created_at": row["created_at"]
         }
 
-        mqtt_connection.publish(
-            topic=TOPIC,
-            payload=json.dumps(payload),
-            qos=mqtt.QoS.AT_LEAST_ONCE
+        mqtt_client.publish(
+            TOPIC,
+            json.dumps(payload),
+            qos=1
         )
 
         print("Sent to AWS IoT:", payload)
