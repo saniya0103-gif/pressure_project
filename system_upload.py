@@ -8,9 +8,9 @@ import paho.mqtt.client as mqtt
 import os
 
 # ---------------- CERTIFICATE PATHS ----------------
-CERT_PATH = "/home/pi_123/data/src/pressure_project/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"
-KEY_PATH  = "/home/pi_123/data/src/pressure_project/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
-CA_PATH   = "/home/pi_123/data/src/pressure_project/aws_iot/AmazonRootCA1.pem"
+CERT_PATH = "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"
+KEY_PATH  = "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
+CA_PATH   = "/app/aws_iot/AmazonRootCA1.pem"
 
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
