@@ -2,19 +2,26 @@ import sqlite3
 import time
 import json
 import ssl
+import os
 import paho.mqtt.client as mqtt
 
 # ---------------- PATHS (INSIDE DOCKER) ----------------
 DB_PATH = "/app/project.db"
 
+# ---------------- AWS IOT CERTIFICATES ----------------
+CA_PATH   = "/app/aws_iot/AmazonRootCA1.pem"
 CERT_PATH = "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"
 KEY_PATH  = "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
-CA_PATH   = "/app/aws_iot/AmazonRootCA1.pem"
+
+print("DB exists:", os.path.exists(DB_PATH))
+print("CA exists:", os.path.exists(CA_PATH))
+print("CERT exists:", os.path.exists(CERT_PATH))
+print("KEY exists:", os.path.exists(KEY_PATH))
 
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 PORT      = 8883
-CLIENT_ID = "pressure-uploader"
+CLIENT_ID = "Raspberry"
 TOPIC     = "brake/pressure"
 
 # ---------------- MQTT CALLBACKS ----------------
@@ -29,7 +36,13 @@ def on_publish(client, userdata, mid):
 
 # ---------------- MQTT CONNECT ----------------
 def connect_mqtt():
-    client = mqtt.Client(client_id=CLIENT_ID)
+    print("🔄 Connecting to AWS IoT...")
+    client = mqtt.Client(
+        client_id=CLIENT_ID,
+        protocol=mqtt.MQTTv311,
+        transport="tcp"
+    )
+
     client.on_connect = on_connect
     client.on_publish = on_publish
 
@@ -50,7 +63,7 @@ while mqtt_client is None:
     try:
         mqtt_client = connect_mqtt()
     except Exception as e:
-        print("MQTT error:", e)
+        print("❌ MQTT error:", e)
         time.sleep(5)
 
 # ---------------- DATABASE ----------------
@@ -70,8 +83,12 @@ def upload_to_aws(row):
         "aws_status": "uploaded"
     }
 
-    mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-    print("➡️ Sent:", payload)
+    result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
+
+    if result.rc == mqtt.MQTT_ERR_SUCCESS:
+        print("➡️ Sent:", payload)
+    else:
+        print("❌ Publish failed:", result.rc)
 
 # ---------------- MAIN LOOP ----------------
 while True:
