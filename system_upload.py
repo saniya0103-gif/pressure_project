@@ -1,4 +1,5 @@
-#!/home/pi_123/data/src/pressure_project/venv311/bin/python
+#!/usr/bin/env python3
+# system_upload.py for Docker
 
 import sqlite3
 import time
@@ -36,6 +37,7 @@ def connect_mqtt():
         client.on_connect = on_connect
         client.on_publish = on_publish
 
+        # TLS configuration
         client.tls_set(
             ca_certs=CA_PATH,
             certfile=CERT_PATH,
@@ -43,6 +45,7 @@ def connect_mqtt():
             tls_version=ssl.PROTOCOL_TLSv1_2
         )
 
+        # Connect
         client.connect(ENDPOINT, PORT, keepalive=60)
         client.loop_start()
         return client
@@ -51,22 +54,17 @@ def connect_mqtt():
         print("MQTT connection failed:", e)
         return None
 
-mqtt_client = None
-while mqtt_client is None:
-    mqtt_client = connect_mqtt()
-    if mqtt_client is None:
-        print("Retrying connection in 5 seconds...")
-        time.sleep(10)
-
-# ------------------ DATABASE SETUP ------------------
-DB_PATH = "project.db"
-time.sleep(10)
+# ---------------- DATABASE SETUP ----------------
+DB_PATH = "/app/project.db"   # keep database named project.db
+if not os.path.exists(DB_PATH):
+    print("❌ Database not found at", DB_PATH)
+    exit(1)
 
 conn = sqlite3.connect(DB_PATH)
 conn.row_factory = sqlite3.Row
 cursor = conn.cursor()
 
-# ------------------ AWS UPLOAD FUNCTION ------------------
+# ---------------- UPLOAD FUNCTION ----------------
 def upload_to_app(row):
     try:
         payload = {
@@ -75,51 +73,43 @@ def upload_to_app(row):
             "fp_pressure": row["fp_pressure"],
             "cr_pressure": row["cr_pressure"],
             "bc_pressure": row["bc_pressure"],
-            "uploaded_db": row["uploaded"],      # DB status (0 or 1)
-            "aws_status": "uploaded"             # AWS status
+            "uploaded_db": row["uploaded"],
+            "aws_status": "uploaded"
         }
-
-        mqtt_client.publish(
-            TOPIC,
-            json.dumps(payload),
-            qos=1
-        )
-
+        mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
         print("Sent to AWS IoT:", payload)
         return True
-
     except Exception as e:
         print("Upload failed:", e)
         return False
 
-# ------------------ MAIN LOOP ------------------
+# ---------------- MAIN LOOP ----------------
+mqtt_client = None
+while mqtt_client is None:
+    mqtt_client = connect_mqtt()
+    if mqtt_client is None:
+        print("Retrying connection in 5 seconds...")
+        time.sleep(5)
+
+print("System started... Uploading pending rows if any.")
+
 while True:
-    # fetch rows in order of created_at (oldest first)
-    cursor.execute("""
-        SELECT * FROM brake_pressure_log
-        ORDER BY created_at ASC
-    """)
+    # Fetch rows in order of creation
+    cursor.execute("SELECT * FROM brake_pressure_log ORDER BY created_at ASC")
     rows = cursor.fetchall()
 
     pending_found = False
     for row in rows:
-        if row["uploaded"] == 0:  # only upload pending rows
+        if row["uploaded"] == 0:
             pending_found = True
             success = upload_to_app(row)
             if success:
-                cursor.execute("""
-                    UPDATE brake_pressure_log
-                    SET uploaded = 1
-                    WHERE id = ?
-                """, (row["id"],))
+                cursor.execute("UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?", (row["id"],))
                 conn.commit()
                 print(f"Uploaded and marked as done ✅ | DB uploaded=1 | Timestamp: {row['created_at']}")
-
-                # ----------------- Delay per row -----------------
-                time.sleep(10)  # wait 2 seconds before next row
+                time.sleep(10)  # delay per row
 
     if not pending_found:
         print("No pending rows to upload (all uploaded).")
 
-    # delay before checking DB again
-    time.sleep(15)
+    time.sleep(10)  # check DB every 5 seconds
