@@ -5,8 +5,9 @@ import time
 import json
 import ssl
 import paho.mqtt.client as mqtt
+import os
 
-time.sleep(10)
+timesleep(10)
 # ---------------- CERTIFICATE PATHS ----------------
 CERT_PATH = "/home/pi_123/data/src/pressure_project/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"
 KEY_PATH  = "/home/pi_123/data/src/pressure_project/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
@@ -56,11 +57,11 @@ while mqtt_client is None:
     mqtt_client = connect_mqtt()
     if mqtt_client is None:
         print("Retrying connection in 5 seconds...")
-        time.sleep(5)
+        time.sleep(10)
 
 # ------------------ DATABASE SETUP ------------------
 DB_PATH = "project.db"
-time.sleep(2)
+time.sleep(10)
 
 conn = sqlite3.connect(DB_PATH)
 conn.row_factory = sqlite3.Row
@@ -70,11 +71,13 @@ cursor = conn.cursor()
 def upload_to_app(row):
     try:
         payload = {
+            "created_at": row["created_at"],
             "bp_pressure": row["bp_pressure"],
             "fp_pressure": row["fp_pressure"],
             "cr_pressure": row["cr_pressure"],
             "bc_pressure": row["bc_pressure"],
-            "created_at": row["created_at"]
+            "uploaded_db": row["uploaded"],      # DB status (0 or 1)
+            "aws_status": "uploaded"             # AWS status
         }
 
         mqtt_client.publish(
@@ -92,6 +95,7 @@ def upload_to_app(row):
 
 # ------------------ MAIN LOOP ------------------
 while True:
+    # fetch rows in order of created_at (oldest first)
     cursor.execute("""
         SELECT * FROM brake_pressure_log
         ORDER BY created_at ASC
@@ -100,7 +104,7 @@ while True:
 
     pending_found = False
     for row in rows:
-        if row["uploaded"] == 0:
+        if row["uploaded"] == 0:  # only upload pending rows
             pending_found = True
             success = upload_to_app(row)
             if success:
@@ -110,8 +114,13 @@ while True:
                     WHERE id = ?
                 """, (row["id"],))
                 conn.commit()
-                print("Uploaded and marked as done ✅")
+                print(f"Uploaded and marked as done ✅ | DB uploaded=1 | Timestamp: {row['created_at']}")
+
+                # ----------------- Delay per row -----------------
+                time.sleep(10)  # wait 2 seconds before next row
+
     if not pending_found:
         print("No pending rows to upload (all uploaded).")
 
+    # delay before checking DB again
     time.sleep(15)
