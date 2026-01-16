@@ -13,7 +13,7 @@ print("List /app/aws_iot:", os.listdir("/app/aws_iot"), flush=True)
 
 # ---------------- PATHS ----------------
 paths = {
-    "DB": "/app/project.db",
+    "DB": "/app/db/project.db",
     "CA": "/app/aws_iot/AmazonRootCA1.pem",
     "CERT": "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt",
     "KEY": "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"

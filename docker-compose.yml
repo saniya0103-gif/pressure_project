@@ -9,7 +9,7 @@ services:
     devices:
       - "/dev/i2c-1:/dev/i2c-1"
     volumes:
-      - ./project.db:/app/project.db
+      - ./db:/app/db
     restart: always
 
   uploader_app:
@@ -17,6 +17,6 @@ services:
     container_name: pressure_uploader
     command: python3 -u system_upload.py
     volumes:
-      - ./project.db:/app/project.db
+      - ./db:/app/db
       - ./aws_iot:/app/aws_iot:ro
     restart: always

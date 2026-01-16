@@ -5,7 +5,7 @@ import sys
 # ---------------- ENCODING SETUP ----------------
 sys.stdout.reconfigure(encoding='utf-8')
 
-DB_PATH = "/app/project.db"
+DB_PATH = "/app/db/project.db"
 
 # ---------------- DATABASE SETUP ----------------
 conn = sqlite3.connect(DB_PATH)
