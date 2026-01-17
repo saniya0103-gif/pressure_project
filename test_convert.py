@@ -12,10 +12,10 @@ ads = ADS.ADS1115(i2c)
 ads.gain = 1  # Adjust gain if needed
 
 # Create single-ended channels
-chan0 = AnalogIn(ads, ADS.P0)
-chan1 = AnalogIn(ads, ADS.P1)
-chan2 = AnalogIn(ads, ADS.P2)
-chan3 = AnalogIn(ads, ADS.P3)
+chan0 = AnalogIn(ads, 0)
+chan1 = AnalogIn(ads, 1)
+chan2 = AnalogIn(ads, 2)
+chan3 = AnalogIn(ads, 3)
 
 def voltage_to_pressure(voltage):
     # Example conversion formula
