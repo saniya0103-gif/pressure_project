@@ -46,8 +46,9 @@ try:
     cr_channel = AnalogIn(ads, 2)
     bc_channel = AnalogIn(ads, 3)
 
-except Exception:
+except Exception as e:
     ADS_AVAILABLE = False
+    print("ADS1115 init failed:", e, flush=True)
 
 # ---------------- SENSOR FUNCTIONS 
 def read_raw_values():
@@ -63,7 +64,7 @@ def read_raw_values():
 
 def convert_to_pressure(raw):
     # Convert raw ADC value to pressure (0–10 bar example)
-    return round((raw / 32767) * 10, 2)
+    return round((raw / 32768.0) * 10, 2)
 
 def get_pressures():
     raw = read_raw_values()
