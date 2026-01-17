@@ -114,7 +114,7 @@ while True:
 
     if not rows:
         print("No pending rows. Waiting...")
-        time.sleep(15)
+        time.sleep(5)
         continue
 
     for row in rows:
@@ -122,6 +122,8 @@ while True:
         if not success:
             print("Upload failed, will retry later.")
             break
+        timesleep(2)
+
         cursor.execute(
             "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
             (row["id"],)
@@ -129,4 +131,4 @@ while True:
         conn.commit()
 
         print(f"Marked uploaded | {row['created_at']}")
-        time.sleep(10)
+        #time.sleep(10)
