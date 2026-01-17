@@ -6,9 +6,10 @@ import os
 # ---------------- ENCODING SETUP ----------------
 sys.stdout.reconfigure(encoding='utf-8')
 
-DB_PATH = "/app/db/project.db"
+# ---------------- DATABASE PATH ----------------
+DB_PATH = os.path.join(os.path.dirname(__file__), "db", "project.db")
 
-# ---------------- ENSURE DB FOLDER EXISTS ----------------
+# Ensure DB folder exists
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 # ---------------- DATABASE SETUP ----------------
@@ -30,7 +31,6 @@ conn.commit()
 
 # ---------------- ADS1115 SETUP ----------------
 ADS_AVAILABLE = True
-
 try:
     import board
     import busio
@@ -64,6 +64,7 @@ def read_raw_values():
             bc_channel.value
         )
     else:
+        # Return dummy values if ADS1115 not available
         return (0, 0, 0, 0)
 
 def convert_to_pressure(raw):
@@ -76,7 +77,7 @@ def get_pressures():
     return raw, pressures
 
 # ---------------- MAIN LOOP ----------------
-print("\nSystem started... Logging data every 20 seconds\n")
+print("\nSystem started... Logging data every 20 seconds\n", flush=True)
 
 while True:
     raw_values, pressures = get_pressures()
@@ -97,7 +98,7 @@ while True:
         """, pressures)
         conn.commit()
 
-    # Only print RAW and PRESSURE values
+    # Print RAW and PRESSURE values
     print(
         f"RAW VALUES\n"
         f"BP:{raw_values[0]} | FP:{raw_values[1]} | "
