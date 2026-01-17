@@ -1,11 +1,15 @@
 import sqlite3
 import time
 import sys
+import os
 
 # ---------------- ENCODING SETUP ----------------
 sys.stdout.reconfigure(encoding='utf-8')
 
 DB_PATH = "/app/db/project.db"
+
+# ---------------- ENSURE DB FOLDER EXISTS ----------------
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 # ---------------- DATABASE SETUP ----------------
 conn = sqlite3.connect(DB_PATH)
@@ -50,7 +54,7 @@ except Exception as e:
     ADS_AVAILABLE = False
     print("ADS1115 init failed:", e, flush=True)
 
-# ---------------- SENSOR FUNCTIONS 
+# ---------------- SENSOR FUNCTIONS ----------------
 def read_raw_values():
     if ADS_AVAILABLE:
         return (
@@ -60,7 +64,7 @@ def read_raw_values():
             bc_channel.value
         )
     else:
-        return (0, 0, 0, 0)  
+        return (0, 0, 0, 0)
 
 def convert_to_pressure(raw):
     # Convert raw ADC value to pressure (0–10 bar example)
@@ -106,4 +110,4 @@ while True:
         flush=True
     )
 
-    time.sleep(1)
+    time.sleep(5)
