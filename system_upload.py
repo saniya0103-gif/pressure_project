@@ -98,8 +98,10 @@ def upload_to_aws(row):
 
     if result.rc == mqtt.MQTT_ERR_SUCCESS:
         print("➡️ Sent:", payload)
+        return True 
     else:
         print("❌ Publish failed:", result.rc)
+        return False
 
 # ---------------- MAIN LOOP ----------------
 while True:
@@ -116,13 +118,15 @@ while True:
         continue
 
     for row in rows:
-        upload_to_aws(row)
-
+        success = upload_to_aws(row)
+        if not success:
+            print("Upload failed, will retry later.")
+            break
         cursor.execute(
             "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
             (row["id"],)
         )
         conn.commit()
 
-        print(f"✅ Marked uploaded | {row['created_at']}")
+        print(f"Marked uploaded | {row['created_at']}")
         time.sleep(10)
