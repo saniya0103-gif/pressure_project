@@ -44,7 +44,7 @@ try:
     bp_channel = AnalogIn(ads, 0)
     fp_channel = AnalogIn(ads, 1)
     cr_channel = AnalogIn(ads, 2)
-    bc_channel = AnalogIn(ads, P3)
+    bc_channel = AnalogIn(ads, 3)
 
 except Exception:
     ADS_AVAILABLE = False
