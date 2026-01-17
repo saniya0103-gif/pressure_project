@@ -5,18 +5,30 @@ import ssl
 import os
 import paho.mqtt.client as mqtt
 
+# ---------------- DYNAMIC BASE PATH ----------------
+# Use /app if inside Docker, otherwise use host project folder
+BASE_PATH = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspath(__file__))
+
 # ---------------- DEBUG ----------------
 print("=== DEBUG START ===", flush=True)
-print("PWD:", os.getcwd(), flush=True)
-print("List /app:", os.listdir("/app"), flush=True)
-print("List /app/aws_iot:", os.listdir("/app/aws_iot"), flush=True)
+print("PWD:", BASE_PATH, flush=True)
 
-# ---------------- PATHS ----------------
+AWS_PATH = os.path.join(BASE_PATH, "aws_iot")
+DB_PATH  = os.path.join(BASE_PATH, "db", "project.db")
+
+# List folder contents safely
+print("List BASE_PATH:", os.listdir(BASE_PATH), flush=True)
+if os.path.exists(AWS_PATH):
+    print("List AWS_PATH:", os.listdir(AWS_PATH), flush=True)
+else:
+    print("AWS folder not found:", AWS_PATH, flush=True)
+
+# Paths
 paths = {
-    "DB": "/app/db/project.db",
-    "CA": "/app/aws_iot/AmazonRootCA1.pem",
-    "CERT": "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt",
-    "KEY": "/app/aws_iot/c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
+    "DB": DB_PATH,
+    "CA": os.path.join(AWS_PATH, "AmazonRootCA1.pem"),
+    "CERT": os.path.join(AWS_PATH, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"),
+    "KEY": os.path.join(AWS_PATH, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key")
 }
 
 for name, path in paths.items():
@@ -78,6 +90,9 @@ while mqtt_client is None:
         time.sleep(5)
 
 # ---------------- DATABASE ----------------
+# Ensure DB folder exists
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+
 conn = sqlite3.connect(DB_PATH)
 conn.row_factory = sqlite3.Row
 cursor = conn.cursor()
@@ -122,7 +137,7 @@ while True:
         if not success:
             print("Upload failed, will retry later.")
             break
-        timesleep(2)
+        time.sleep(2)  # keep your original sleep condition
 
         cursor.execute(
             "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
@@ -131,4 +146,3 @@ while True:
         conn.commit()
 
         print(f"Marked uploaded | {row['created_at']}")
-        #time.sleep(10)
