@@ -7,10 +7,14 @@ import os
 sys.stdout.reconfigure(encoding='utf-8')
 
 # ---------------- DATABASE ----------------
-# Use Docker-mounted db folder
-DB_PATH = os.path.join(os.path.dirname(__file__), "db", "project.db")
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+# Docker-safe path
+DB_FOLDER = "/app/db"               # Must match your docker-compose volume
+DB_PATH = os.path.join(DB_FOLDER, "project.db")
 
+# Ensure folder exists
+os.makedirs(DB_FOLDER, exist_ok=True)
+
+# Connect to database
 try:
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
@@ -41,19 +45,16 @@ try:
     import adafruit_ads1x15.ads1115 as ADS
     from adafruit_ads1x15.analog_in import AnalogIn
 
-    # Force Pi 5 compatibility
+    # Pi 5 compatibility
     os.environ["BLINKA_FORCEBOARD"] = "RASPBERRY_PI_5"
     os.environ["BLINKA_FORCECHIP"] = "BCM2712"
     os.environ["BLINKA_USE_LGPIO"] = "1"
 
-    # Initialize I2C
+    # Initialize I2C and ADS1115
     i2c = busio.I2C(board.SCL, board.SDA)
-
-    # Initialize ADS1115
     ads = ADS.ADS1115(i2c)
     ads.gain = 1
 
-    # Channels
     bp_channel = AnalogIn(ads, 0)
     fp_channel = AnalogIn(ads, 1)
     cr_channel = AnalogIn(ads, 2)
@@ -73,7 +74,7 @@ def read_raw_values():
         return 0, 0, 0, 0
 
 def convert_to_pressure(raw):
-    # Convert raw ADC value to pressure (0–10 bar example)
+    # Convert raw ADC value (0–32767) to 0–10 bar
     return round((raw / 32767) * 10, 2)
 
 def get_pressures():
@@ -105,7 +106,7 @@ while True:
         """, pressures)
         conn.commit()
 
-    # Print RAW and PRESSURE values
+    # Print RAW and converted pressures
     print(
         f"RAW: BP={raw_values[0]} FP={raw_values[1]} CR={raw_values[2]} BC={raw_values[3]}\n"
         f"BAR: BP={pressures[0]} FP={pressures[1]} CR={pressures[2]} BC={pressures[3]}\n"
