@@ -1,10 +1,8 @@
-version: "3.9"
-
 services:
   convert_app:
     build: .
     container_name: pressure_convert
-    command: tail -f /dev/null      # keeps container alive
+    command: python3 -u system_convert.py
     privileged: true
     devices:
       - "/dev/i2c-1:/dev/i2c-1"
@@ -16,16 +14,16 @@ services:
     working_dir: /app
     tty: true
     stdin_open: true
-    restart: "no"
+    restart: "always"
 
   uploader_app:
     build: .
     container_name: pressure_uploader
-    command: tail -f /dev/null      # keeps container alive
+    command: python3 -u system_upload.py
     volumes:
       - ./db:/app/db
       - ./aws_iot:/app/aws_iot:ro
     working_dir: /app
     tty: true
     stdin_open: true
-    restart: "no"
+    restart: "always"
