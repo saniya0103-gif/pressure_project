@@ -1,17 +1,38 @@
-convert_app:
-  build: .
-  container_name: pressure_convert
-  command: python system_convert.py
-  privileged: true
-  user: root
-  devices:
-    - "/dev/gpiochip0:/dev/gpiochip0"
-    - "/dev/gpiochip4:/dev/gpiochip4"
-    - "/dev/i2c-1:/dev/i2c-1"
-  volumes:
-    - ./db:/app/db
-  environment:
-    - BLINKA_FORCEBOARD=RASPBERRY_PI_5
-    - BLINKA_FORCECHIP=BCM2712
-  working_dir: /app
-  restart: always
+version: "3.9"
+
+services:
+  convert_app:
+    build: .
+    container_name: pressure_convert
+    command: python system_convert.py
+    privileged: true
+    devices:
+      - "/dev/gpiochip0:/dev/gpiochip0"
+      - "/dev/gpiochip4:/dev/gpiochip4"
+      - "/dev/i2c-1:/dev/i2c-1"
+    volumes:
+      - ./db:/app/db
+    environment:
+      - BLINKA_FORCEBOARD=RASPBERRY_PI_5
+      - BLINKA_FORCECHIP=BCM2712
+      - BLINKA_USE_LGPIO=1
+    working_dir: /app
+    restart: always
+    tty: true
+    stdin_open: true
+
+  uploader_app:
+    build: .
+    container_name: pressure_uploader
+    command: python system_upload.py
+    volumes:
+      - ./db:/app/db
+      - ./aws_iot:/app/aws_iot:ro
+    environment:
+      - BLINKA_FORCEBOARD=RASPBERRY_PI_5
+      - BLINKA_FORCECHIP=BCM2712
+      - BLINKA_USE_LGPIO=1
+    working_dir: /app
+    restart: always
+    tty: true
+    stdin_open: true
