@@ -1,28 +1,29 @@
-#version: "3.9"
 services:
   convert_app:
     build: .
     container_name: pressure_convert
-    command: python3 -u system_convert.py
-    privileged: true              # Required for I2C access
+    command: bash
+    privileged: true
     devices:
-      - "/dev/i2c-1:/dev/i2c-1"   # Map I2C bus
-    group_add:
-      - i2c
+      - "/dev/i2c-1:/dev/i2c-1"
     volumes:
-      - ./db:/app/db              # Share DB
+      - ./db:/app/db
     environment:
       - BLINKA_FORCEBOARD=RASPBERRY_PI_5
       - BLINKA_FORCECHIP=BCM2712
     working_dir: /app
-    restart: always
+    tty: true
+    stdin_open: true
+    restart: "no"
 
   uploader_app:
     build: .
     container_name: pressure_uploader
-    command: python3 -u system_upload.py
+    command: bash
     volumes:
-      - ./db:/app/db              # Share DB
-      - ./aws_iot:/app/aws_iot:ro # AWS scripts read-only
+      - ./db:/app/db
+      - ./aws_iot:/app/aws_iot:ro
     working_dir: /app
-    restart: always
+    tty: true
+    stdin_open: true
+    restart: "no"
