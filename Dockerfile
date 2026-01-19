@@ -1,9 +1,9 @@
-# Use 3.12-bookworm for the best Pi 5 compatibility in 2026
+# Use Python 3.12 slim for Pi 5 compatibility
 FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
-# Install dependencies required for the new Pi 5 GPIO architecture (RP1 chip)
+# Install system dependencies for I2C & GPIO
 RUN apt-get update && apt-get install -y \
     i2c-tools \
     libgpiod-dev \
@@ -11,13 +11,19 @@ RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy requirements file
 COPY requirements.txt .
 
-# Upgrade pip and install requirements
-# Ensure your requirements.txt has 'rpi-lgpio' and 'lgpio', NOT 'RPi.GPIO'
+# Upgrade pip & install Python packages
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy project files
 COPY . .
 
+# Force Blinka to Pi 4B to bypass Pi 5 microcontroller issue
+ENV BLINKA_FORCEBOARD=RASPBERRY_PI_4B
+ENV BLINKA_FORCECHIP=BCM2711
+
+# Run main script
 CMD ["python3", "-u", "system_convert.py"]
