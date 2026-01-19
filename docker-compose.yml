@@ -1,29 +1,28 @@
-services:
-  convert_app:
-    build: .
-    container_name: pressure_convert
-    command: bash
-    privileged: true
-    devices:
-      - "/dev/i2c-1:/dev/i2c-1"
-    volumes:
-      - ./db:/app/db
-    environment:
-      - BLINKA_FORCEBOARD=RASPBERRY_PI_5
-      - BLINKA_FORCECHIP=BCM2712
-    working_dir: /app
-    tty: true
-    stdin_open: true
-    restart: "no"
+convert_app:
+  build: .
+  container_name: pressure_convert
+  command: tail -f /dev/null   # keeps container alive
+  privileged: true
+  devices:
+    - "/dev/i2c-1:/dev/i2c-1"
+  volumes:
+    - ./db:/app/db
+  environment:
+    - BLINKA_FORCEBOARD=RASPBERRY_PI_5
+    - BLINKA_FORCECHIP=BCM2712
+  working_dir: /app
+  tty: true
+  stdin_open: true
+  restart: "no"
 
-  uploader_app:
-    build: .
-    container_name: pressure_uploader
-    command: bash
-    volumes:
-      - ./db:/app/db
-      - ./aws_iot:/app/aws_iot:ro
-    working_dir: /app
-    tty: true
-    stdin_open: true
-    restart: "no"
+uploader_app:
+  build: .
+  container_name: pressure_uploader
+  command: tail -f /dev/null   # keeps container alive
+  volumes:
+    - ./db:/app/db
+    - ./aws_iot:/app/aws_iot:ro
+  working_dir: /app
+  tty: true
+  stdin_open: true
+  restart: "no"
