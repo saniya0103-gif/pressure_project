@@ -37,10 +37,10 @@ try:
     ads = ADS.ADS1115(i2c)
     ads.gain = 1
 
-    bp = AnalogIn(ads, ADS.P0)
-    fp = AnalogIn(ads, ADS.P1)
-    cr = AnalogIn(ads, ADS.P2)
-    bc = AnalogIn(ads, ADS.P3)
+    bp = AnalogIn(ads, 0)
+    fp = AnalogIn(ads, 1)
+    cr = AnalogIn(ads, 2)
+    bc = AnalogIn(ads, 3)
 
     print("✅ ADS1115 initialized")
 
