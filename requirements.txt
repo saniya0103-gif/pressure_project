@@ -4,6 +4,6 @@ boto3
 requests
 pandas
 flask
-adafruit-blinka==7.17.0
-adafruit-circuitpython-ads1x15==7.1.1
+adafruit-blinka
+adafruit-circuitpython-ads1x15
 numpy
