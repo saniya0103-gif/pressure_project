@@ -4,8 +4,8 @@ import sys
 import os
 
 # ---------------- FORCE RASPBERRY PI 4 FOR BLINKA ----------------
-os.environ["BLINKA_FORCEBOARD"] = "RASPBERRY_PI_4B"  # Pretend Pi 4B
-os.environ["BLINKA_FORCECHIP"] = "BCM2711"           # Pretend BCM2711
+os.environ["BLINKA_FORCEBOARD"] = "RASPBERRY_PI_5"  # Pretend Pi 4B
+os.environ["BLINKA_FORCECHIP"] = "BCM2712"           # Pretend BCM2711
 
 # ---------------- ENCODING SETUP ----------------
 sys.stdout.reconfigure(encoding='utf-8')
