@@ -6,7 +6,8 @@ pandas
 flask
 adafruit-blinka
 adafruit-circuitpython-ads1x15
-RPi.GPIO
+rpi-lgpio==0.6
+lgpio==0.2.2.0
 smbus2
 numpy
 paho-mqtt>=1.6.1
