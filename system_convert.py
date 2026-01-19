@@ -7,12 +7,22 @@ import os
 sys.stdout.reconfigure(encoding='utf-8')
 
 # ---------------- DATABASE SETUP ----------------
-DB_PATH = os.path.join(os.path.dirname(__file__), "project.db")
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+# Use the Docker-mounted db folder
+DB_DIR = os.path.join(os.path.dirname(__file__), "db")
+os.makedirs(DB_DIR, exist_ok=True)
 
-conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-cursor = conn.cursor()
+DB_PATH = os.path.join(DB_DIR, "project.db")
 
+# Connect to SQLite
+try:
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+    print(f"✅ Database connected: {DB_PATH}", flush=True)
+except Exception as e:
+    print(f"❌ Failed to connect to database: {e}", flush=True)
+    sys.exit(1)
+
+# Create table if not exists
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS brake_pressure_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
