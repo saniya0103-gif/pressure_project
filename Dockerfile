@@ -1,36 +1,35 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
-# System dependencies
+WORKDIR /app
+
+# System dependencies for Pi 5 GPIO + I2C
 RUN apt-get update && apt-get install -y \
     i2c-tools \
     libgpiod-dev \
+    libgpiod2 \
     python3-dev \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Working directory
-WORKDIR /app
-
 # Upgrade pip
-RUN pip install --upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
 
-# Install Adafruit Blinka + ADS1115
-RUN pip install \
+# Python libraries (NO RPi.GPIO)
+RUN pip install --no-cache-dir \
     adafruit-blinka \
     adafruit-circuitpython-ads1x15 \
-    RPi.GPIO \
+    lgpio \
     smbus2 \
     paho-mqtt \
     requests \
     pytz \
     AWSIoTPythonSDK
 
-# Copy project files
-COPY . /app
+COPY . .
 
-# Environment for Raspberry Pi 5
-ENV BLINKA_FORCEBOARD=RASPBERRY_PI_5
-ENV BLINKA_FORCECHIP=BCM2712
+ENV BLINKA_FORCEBOARD=RASPBERRY_PI_4B
+ENV BLINKA_FORCECHIP=BCM2711
+ENV BLINKA_USE_LGPIO=1
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "system_convert.py"]
+CMD ["python3", "-u", "system_convert.py"]
