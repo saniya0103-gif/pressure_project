@@ -1,3 +1,5 @@
+version: "3.9"
+
 convert_app:
   build: .
   container_name: pressure_convert
