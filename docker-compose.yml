@@ -5,7 +5,6 @@ services:
     build: .
     container_name: pressure_convert
     command: python system_convert.py
-    user: "1000:1000"
     privileged: true
     devices:
       - "/dev/gpiochip0:/dev/gpiochip0"
@@ -26,7 +25,6 @@ services:
     build: .
     container_name: pressure_uploader
     command: python system_upload.py
-    user: "1000:1000"
     volumes:
       - ./db:/app/db
       - ./aws_iot:/app/aws_iot:ro
