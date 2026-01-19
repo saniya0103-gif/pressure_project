@@ -1,9 +1,6 @@
-# Use Python 3.12 slim for Pi 5 compatibility
-FROM python:3.12-slim-bookworm
+FROM python:3.11-slim
 
-WORKDIR /app
-
-# Install system dependencies for I2C & GPIO
+# System dependencies
 RUN apt-get update && apt-get install -y \
     i2c-tools \
     libgpiod-dev \
@@ -11,19 +8,29 @@ RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file
-COPY requirements.txt .
+# Working directory
+WORKDIR /app
 
-# Upgrade pip & install Python packages
-RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+# Upgrade pip
+RUN pip install --upgrade pip
+
+# Install Adafruit Blinka + ADS1115
+RUN pip install \
+    adafruit-blinka \
+    adafruit-circuitpython-ads1x15 \
+    RPi.GPIO \
+    smbus2 \
+    paho-mqtt \
+    requests \
+    pytz \
+    AWSIoTPythonSDK
 
 # Copy project files
-COPY . .
+COPY . /app
 
-# Force Blinka to Pi 4B to bypass Pi 5 microcontroller issue
-ENV BLINKA_FORCEBOARD=RASPBERRY_PI_4B
-ENV BLINKA_FORCECHIP=BCM2711
+# Environment for Raspberry Pi 5
+ENV BLINKA_FORCEBOARD=RASPBERRY_PI_5
+ENV BLINKA_FORCECHIP=BCM2712
+ENV PYTHONUNBUFFERED=1
 
-# Run main script
-CMD ["python3", "-u", "system_convert.py"]
+CMD ["python", "system_convert.py"]
