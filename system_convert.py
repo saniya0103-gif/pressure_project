@@ -3,13 +3,22 @@ import time
 import sys
 import os
 
+# ---------------- ENVIRONMENT ----------------
+os.environ["BLINKA_FORCEBOARD"] = "RASPBERRY_PI_5"
+os.environ["BLINKA_FORCECHIP"] = "BCM2712"
+
+# ---------------- IMPORTS ----------------
+import board
+import busio
+import adafruit_ads1x15.ads1115 as ADS
+from adafruit_ads1x15.analog_in import AnalogIn
+import lgpio
+
 # ---------------- ENCODING SETUP ----------------
 sys.stdout.reconfigure(encoding='utf-8')
 
 # ---------------- DATABASE PATH ----------------
 DB_PATH = os.path.join(os.path.dirname(__file__), "db", "project.db")
-
-# Ensure DB folder exists
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 # ---------------- DATABASE SETUP ----------------
@@ -32,11 +41,6 @@ conn.commit()
 # ---------------- ADS1115 SETUP ----------------
 ADS_AVAILABLE = True
 try:
-    import board
-    import busio
-    import adafruit_ads1x15.ads1115 as ADS
-    from adafruit_ads1x15.analog_in import AnalogIn
-
     # Initialize I2C
     i2c = busio.I2C(board.SCL, board.SDA)
 
@@ -77,7 +81,7 @@ def get_pressures():
     return raw, pressures
 
 # ---------------- MAIN LOOP ----------------
-print("\nSystem started... Logging data every 20 seconds\n", flush=True)
+print("\nSystem started... Logging data every 5 seconds\n", flush=True)
 
 while True:
     raw_values, pressures = get_pressures()
