@@ -5,13 +5,16 @@ services:
     command: python3 -u system_convert.py
     privileged: true
     devices:
-      - "/dev/gpiochip0:/dev/gpiochip0"  # GPIO access
+      # Map all gpiochips to ensure the new RP1 controller is found
+      - "/dev/gpiochip0:/dev/gpiochip0"
+      - "/dev/gpiochip4:/dev/gpiochip4" 
       - "/dev/i2c-1:/dev/i2c-1"
     volumes:
       - ./db:/app/db
     environment:
-      - BLINKA_FORCEBOARD=RASPBERRY_PI_4B
-      - BLINKA_FORCECHIP=BCM2711
+      # CORRECT VALUES FOR PI 5
+      - BLINKA_FORCEBOARD=RASPBERRY_PI_5
+      - BLINKA_FORCECHIP=BCM2712
     working_dir: /app
     tty: true
     stdin_open: true
