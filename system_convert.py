@@ -1,15 +1,21 @@
 import sqlite3
 import time
-import os
 import sys
+import os
 
-# ---------------- ENCODING ----------------
-sys.stdout.reconfigure(encoding="utf-8")
+# ---------------- ENCODING SETUP ----------------
+sys.stdout.reconfigure(encoding='utf-8')
 
-# ---------------- DATABASE PATH ----------------
-DB_FOLDER = "/app/db"  # Docker volume mapped folder
+# ---------------- DYNAMIC DB PATH ----------------
+# Works both inside Docker (/app) or on host
+BASE_PATH = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspath(__file__))
+DB_FOLDER = os.path.join(BASE_PATH, "db")
 DB_PATH = os.path.join(DB_FOLDER, "project.db")
-os.makedirs(DB_FOLDER, exist_ok=True)  # ensure folder exists
+
+# Create DB folder if it doesn't exist
+os.makedirs(DB_FOLDER, exist_ok=True)
+
+print("Database path:", DB_PATH, flush=True)
 
 # ---------------- DATABASE SETUP ----------------
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -30,41 +36,51 @@ conn.commit()
 
 # ---------------- ADS1115 SETUP ----------------
 ADS_AVAILABLE = True
-
 try:
     import board
     import busio
     import adafruit_ads1x15.ads1115 as ADS
     from adafruit_ads1x15.analog_in import AnalogIn
 
-    # I2C initialization
+    # Force Pi 5 compatibility
+    os.environ["BLINKA_FORCEBOARD"] = "RASPBERRY_PI_5"
+    os.environ["BLINKA_FORCECHIP"] = "BCM2712"
+    os.environ["BLINKA_USE_LGPIO"] = "1"
+
+    # Initialize I2C
     i2c = busio.I2C(board.SCL, board.SDA)
 
-    # ADS1115 initialization
+    # Initialize ADS1115
     ads = ADS.ADS1115(i2c)
     ads.gain = 1
 
-    # ADS channels
+    # Define channels
     bp_channel = AnalogIn(ads, 0)
     fp_channel = AnalogIn(ads, 1)
     cr_channel = AnalogIn(ads, 2)
     bc_channel = AnalogIn(ads, 3)
 
-    print("✅ ADS1115 initialized successfully")
+    print("✅ ADS1115 initialized successfully", flush=True)
 
 except Exception as e:
     ADS_AVAILABLE = False
-    print("❌ ADS1115 init failed:", e)
+    print("❌ ADS1115 init failed:", e, flush=True)
 
 # ---------------- SENSOR FUNCTIONS ----------------
 def read_raw_values():
     if ADS_AVAILABLE:
-        return (bp_channel.value, fp_channel.value, cr_channel.value, bc_channel.value)
+        return (
+            bp_channel.value,
+            fp_channel.value,
+            cr_channel.value,
+            bc_channel.value
+        )
     else:
+        # If ADS not available, return zeros
         return (0, 0, 0, 0)
 
 def convert_to_pressure(raw):
-    """Convert raw ADC value to pressure in bar (0–10 example)"""
+    # Convert raw ADC value to pressure (0-10 bar)
     return round((raw / 32767) * 10, 2)
 
 def get_pressures():
@@ -73,12 +89,12 @@ def get_pressures():
     return raw, pressures
 
 # ---------------- MAIN LOOP ----------------
-print("\nSystem started... Logging data every 20 seconds\n")
+print("\nSystem started... Logging data every 20 seconds\n", flush=True)
 
 while True:
     raw_values, pressures = get_pressures()
 
-    # Fetch last logged pressures
+    # Fetch last logged values
     cursor.execute("""
         SELECT bp_pressure, fp_pressure, cr_pressure, bc_pressure
         FROM brake_pressure_log
@@ -87,7 +103,7 @@ while True:
     """)
     last = cursor.fetchone()
 
-    # Insert new row only if difference >= 0.5 bar
+    # Insert only if first reading or difference >= 0.5 bar
     if not last or any(abs(n - l) >= 0.5 for n, l in zip(pressures, last)):
         cursor.execute("""
             INSERT INTO brake_pressure_log
@@ -96,12 +112,12 @@ while True:
         """, pressures)
         conn.commit()
 
-    # Print formatted output
+    # Print RAW and converted pressure values
     print(
-        f"RAW: BP={raw_values[0]} FP={raw_values[1]} CR={raw_values[2]} BC={raw_values[3]}\n"
-        f"BAR: BP={pressures[0]} FP={pressures[1]} CR={pressures[2]} BC={pressures[3]}\n"
+        f"RAW VALUES     -> BP:{raw_values[0]} | FP:{raw_values[1]} | CR:{raw_values[2]} | BC:{raw_values[3]}\n"
+        f"PRESSURE (bar) -> BP:{pressures[0]} | FP:{pressures[1]} | CR:{pressures[2]} | BC:{pressures[3]}\n"
         f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        "---------------------------------------------",
+        f"{'-'*50}",
         flush=True
     )
 
