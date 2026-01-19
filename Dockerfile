@@ -1,5 +1,5 @@
 # Use Raspberry Pi Python image from balena
-FROM balenalib/raspberrypi3-python:3.11
+FROM balenalib/raspberrypi4-64-python:3.11
 
 # Set working directory
 WORKDIR /app
