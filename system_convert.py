@@ -7,11 +7,11 @@ import os
 sys.stdout.reconfigure(encoding='utf-8')
 
 # ---------------- DATABASE SETUP ----------------
-# Use the Docker-mounted db folder
-DB_DIR = os.path.join(os.path.dirname(__file__), "db")
-os.makedirs(DB_DIR, exist_ok=True)
+# Use a fixed path that works inside Docker
+DB_PATH = os.path.join(os.path.dirname(__file__), "project.db")
 
-DB_PATH = os.path.join(DB_DIR, "project.db")
+# Ensure the folder exists (usually /app in Docker)
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 # Connect to SQLite
 try:
@@ -44,11 +44,6 @@ try:
     import adafruit_ads1x15.ads1115 as ADS
     from adafruit_ads1x15.analog_in import AnalogIn
 
-    # Force Pi 5 compatibility
-    os.environ["BLINKA_FORCEBOARD"] = "RASPBERRY_PI_5"
-    os.environ["BLINKA_FORCECHIP"] = "BCM2712"
-    os.environ["BLINKA_USE_LGPIO"] = "1"
-
     # Initialize I2C
     i2c = busio.I2C(board.SCL, board.SDA)
 
@@ -56,13 +51,13 @@ try:
     ads = ADS.ADS1115(i2c)
     ads.gain = 1
 
-    # Channels
+    # ADS1115 Channels
     bp_channel = AnalogIn(ads, 0)
     fp_channel = AnalogIn(ads, 1)
     cr_channel = AnalogIn(ads, 2)
     bc_channel = AnalogIn(ads, 3)
 
-    print("✅ ADS1115 initialized successfully")
+    print("✅ ADS1115 initialized successfully", flush=True)
 
 except Exception as e:
     ADS_AVAILABLE = False
@@ -81,7 +76,8 @@ def read_raw_values():
         return (0, 0, 0, 0)
 
 def convert_to_pressure(raw):
-    return round((raw / 32768.0) * 10.0, 2)
+    # Convert raw ADC value to pressure (0–10 bar example)
+    return round((raw / 32767) * 10, 2)
 
 def get_pressures():
     raw = read_raw_values()
@@ -89,7 +85,7 @@ def get_pressures():
     return raw, pressures
 
 # ---------------- MAIN LOOP ----------------
-print("\nSystem started... Logging every 20 seconds\n")
+print("\nSystem started... Logging data every 20 seconds\n", flush=True)
 
 while True:
     raw_values, pressures = get_pressures()
@@ -112,12 +108,16 @@ while True:
         """, pressures)
         conn.commit()
 
-    # Print in requested format
+    # Print RAW and PRESSURE values
     print(
-        f"pressure_convert | RAW: (BP={raw_values[0]}, FP={raw_values[1]}, CR={raw_values[2]}, BC={raw_values[3]})\n"
-        f"pressure_convert | BAR: BP={pressures[0]} FP={pressures[1]} CR={pressures[2]} BC={pressures[3]}\n"
-        f"pressure_convert | Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        f"pressure_convert | ----------------------------------",
+        f"RAW VALUES\n"
+        f"BP:{raw_values[0]} | FP:{raw_values[1]} | "
+        f"CR:{raw_values[2]} | BC:{raw_values[3]}\n"
+        f"PRESSURE VALUES\n"
+        f"BP:{pressures[0]} bar | FP:{pressures[1]} bar | "
+        f"CR:{pressures[2]} bar | BC:{pressures[3]} bar\n"
+        f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        "---------------------------------------------",
         flush=True
     )
 
