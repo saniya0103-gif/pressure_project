@@ -4,7 +4,7 @@ boto3
 requests
 pandas
 flask
-adafruit-blinka>=11.0.0
+adafruit-blinka==10.17.0
 adafruit-circuitpython-ads1x15
 lgpio==0.2.2.0
 smbus2
