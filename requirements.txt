@@ -4,9 +4,6 @@ boto3
 requests
 pandas
 flask
-adafruit-blinka==10.17.0
-adafruit-circuitpython-ads1x15
-lgpio==0.2.2.0
-smbus2
+adafruit-blinka==9.17.0
+adafruit-circuitpython-ads1x15==7.1.1
 numpy
-paho-mqtt>=1.6.1
