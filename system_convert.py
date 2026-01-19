@@ -3,16 +3,9 @@ import time
 import sys
 import os
 
-# ---------------- ENVIRONMENT ----------------
-os.environ["BLINKA_FORCEBOARD"] = "RASPBERRY_PI_5"
-os.environ["BLINKA_FORCECHIP"] = "BCM2712"
-
-# ---------------- IMPORTS ----------------
-import board
-import busio
-import adafruit_ads1x15.ads1115 as ADS
-from adafruit_ads1x15.analog_in import AnalogIn
-import lgpio
+# ---------------- FORCE RASPBERRY PI 4 FOR BLINKA ----------------
+os.environ["BLINKA_FORCEBOARD"] = "RASPBERRY_PI_4B"  # Pretend Pi 4B
+os.environ["BLINKA_FORCECHIP"] = "BCM2711"           # Pretend BCM2711
 
 # ---------------- ENCODING SETUP ----------------
 sys.stdout.reconfigure(encoding='utf-8')
@@ -41,7 +34,13 @@ conn.commit()
 # ---------------- ADS1115 SETUP ----------------
 ADS_AVAILABLE = True
 try:
-    # Initialize I2C
+    import board
+    import busio
+    import adafruit_ads1x15.ads1115 as ADS
+    from adafruit_ads1x15.analog_in import AnalogIn
+    import lgpio
+
+    # Initialize I2C using board pins
     i2c = busio.I2C(board.SCL, board.SDA)
 
     # Initialize ADS1115
