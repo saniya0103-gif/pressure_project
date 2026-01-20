@@ -9,41 +9,50 @@ import paho.mqtt.client as mqtt
 # ---------------- STDOUT ----------------
 sys.stdout.reconfigure(encoding="utf-8")
 
-# ---------------- PATHS ----------------
+# ---------------- BASE PATH ----------------
 BASE_PATH = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspath(__file__))
 
+# ---------------- DATABASE ----------------
 DB_PATH = os.path.join(BASE_PATH, "db", "project.db")
-AWS_PATH = os.path.join(BASE_PATH, "aws_iot")
 
-ROOT_CA = os.path.join(AWS_PATH, "AmazonRootCA1.pem")
-CERT_FILE = os.path.join(AWS_PATH, "device.pem.crt")
-KEY_FILE = os.path.join(AWS_PATH, "private.pem.key")
+# ---------------- AWS CERT PATHS (FIXED) ----------------
+AWS_IOT_DIR = os.path.join(BASE_PATH, "aws_iot")
 
-# ---------------- AWS SETTINGS ----------------
-AWS_ENDPOINT = "xxxxxxxxxxxx-ats.iot.ap-south-1.amazonaws.com"  # <-- CHANGE
-AWS_PORT = 8883
-CLIENT_ID = "pressure_pi_01"
-TOPIC = "railway/brake_pressure"
+ROOT_CA = os.path.join(AWS_IOT_DIR, "AmazonRootCA1.pem")
+CERT_FILE = os.path.join(
+    AWS_IOT_DIR,
+    "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"
+)
+KEY_FILE = os.path.join(
+    AWS_IOT_DIR,
+    "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
+)
 
-# ---------------- VALIDATE FILES ----------------
+# ---------------- CHECK FILES ----------------
 for f in [DB_PATH, ROOT_CA, CERT_FILE, KEY_FILE]:
     if not os.path.exists(f):
         print("❌ Missing file:", f, flush=True)
         sys.exit(1)
 
-print("✅ All paths verified", flush=True)
+print("✅ Database and certificates verified", flush=True)
+
+# ---------------- AWS SETTINGS ----------------
+AWS_ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"  # <-- PUT YOUR ENDPOINT
+AWS_PORT = 8883
+CLIENT_ID = "Raspberry"
+TOPIC = "brake/pressure"
 
 # ---------------- DB CONNECTION ----------------
 conn = sqlite3.connect(DB_PATH, timeout=10)
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
-# ---------------- MQTT CALLBACKS ----------------
+# ---------------- MQTT CALLBACK ----------------
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print("✅ Connected to AWS IoT Core", flush=True)
     else:
-        print("❌ MQTT connection failed, RC:", rc, flush=True)
+        print("❌ MQTT connection failed RC:", rc, flush=True)
 
 # ---------------- MQTT CLIENT ----------------
 client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
@@ -56,7 +65,7 @@ client.tls_set(
     tls_version=ssl.PROTOCOL_TLSv1_2
 )
 
-client.connect(AWS_ENDPOINT, AWS_PORT, keepalive=60)
+client.connect(AWS_ENDPOINT, AWS_PORT, 60)
 client.loop_start()
 
 # ---------------- UPLOAD FUNCTION ----------------
@@ -73,43 +82,34 @@ def upload_to_aws(row):
     result = client.publish(TOPIC, json.dumps(payload), qos=1)
     result.wait_for_publish()
 
-    if result.rc == mqtt.MQTT_ERR_SUCCESS:
-        print(f"⬆️ Uploaded ID {row['id']}", flush=True)
-        return True
-    else:
-        print("❌ Publish failed", flush=True)
-        return False
+    return result.rc == mqtt.MQTT_ERR_SUCCESS
 
 # ---------------- MAIN LOOP ----------------
 while True:
-    try:
-        cur.execute("""
-            SELECT *
-            FROM brake_pressure_log
-            WHERE uploaded = 0
-            ORDER BY created_at ASC
-            LIMIT 5
-        """)
-        rows = cur.fetchall()
+    cur.execute("""
+        SELECT *
+        FROM brake_pressure_log
+        WHERE uploaded = 0
+        ORDER BY created_at ASC
+        LIMIT 5
+    """)
+    rows = cur.fetchall()
 
-        if not rows:
-            print("✅ No pending rows", flush=True)
-            time.sleep(5)
-            continue
-
-        for row in rows:
-            if upload_to_aws(row):
-                cur.execute(
-                    "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
-                    (row["id"],)
-                )
-                conn.commit()
-                print(f"✅ Row {row['id']} marked uploaded (1)", flush=True)
-            else:
-                break
-
-        time.sleep(2)
-
-    except Exception as e:
-        print("❌ Error:", e, flush=True)
+    if not rows:
+        print("✅ No pending rows", flush=True)
         time.sleep(5)
+        continue
+
+    for row in rows:
+        if upload_to_aws(row):
+            cur.execute(
+                "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
+                (row["id"],)
+            )
+            conn.commit()
+            print(f"⬆️ Uploaded & marked ID {row['id']}", flush=True)
+        else:
+            print("❌ Upload failed, retry later", flush=True)
+            break
+
+    time.sleep(2)
