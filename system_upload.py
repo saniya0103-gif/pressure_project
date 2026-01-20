@@ -12,9 +12,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "project.db")
 CERT_DIR = os.path.join(BASE_DIR, "aws_iot")
 
+# Use the actual filenames from your aws_iot folder
 ROOT_CA = os.path.join(CERT_DIR, "AmazonRootCA1.pem")
-CERT_FILE = os.path.join(CERT_DIR, "device.pem.crt")
-KEY_FILE = os.path.join(CERT_DIR, "private.pem.key")
+CERT_FILE = os.path.join(CERT_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt")
+KEY_FILE = os.path.join(CERT_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key")
 
 # ================= AWS CONFIG =================
 AWS_ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
