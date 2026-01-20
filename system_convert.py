@@ -58,8 +58,10 @@ try:
     bc_channel = AnalogIn(ads, 3)
 
 except Exception as e:
-    print("⚠️ ADS1115 sensor not found. Using dummy zeros.", flush=True)
+    print(f"ADS1115 sensor not found. Using dummy zeros.", flush=True)
     ADS_AVAILABLE = False
+    print("✅ ADS1115 CONNECTED and initialized", flush=True)
+
 
 # ---------------- SENSOR FUNCTIONS ----------------
 def read_raw_values():
