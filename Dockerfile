@@ -1,48 +1,57 @@
-# Use Raspberry Pi compatible Python 3.11 slim image
-FROM python:3.11-slim-bullseye
+# -----------------------------
+# Dockerfile for Raspberry Pi 5
+# -----------------------------
+
+FROM python:3.11-bullseye
 
 # -----------------------------
 # Install system dependencies
+# -----------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
-    i2c-tools \
+    build-essential \
     python3-dev \
     gcc \
-    build-essential \
     swig \
     libgpiod2 \
+    i2c-tools \
     python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------
 # Set working directory
+# -----------------------------
 WORKDIR /app
 
 # -----------------------------
-# Clone your public repository
-RUN git clone https://github.com/saniya0103-gif/pressure_project.git /app
+# Clone and build lgpio C library
+# -----------------------------
+RUN git clone https://github.com/wiringPi/lgpio.git /tmp/lgpio && \
+    cd /tmp/lgpio && \
+    make && make install && \
+    rm -rf /tmp/lgpio
 
 # -----------------------------
 # Upgrade pip and install Python libraries
+# -----------------------------
+COPY requirements.txt /app/
 RUN python3 -m pip install --upgrade pip
-RUN python3 -m pip install \
-    smbus2 \
-    paho-mqtt \
-    requests \
-    pytz \
-    AWSIoTPythonSDK \
-    adafruit-blinka \
-    adafruit-circuitpython-ads1x15 \
-    numpy \
-    lgpio
+RUN python3 -m pip install -r requirements.txt
 
 # -----------------------------
-# Blinka environment variables for Raspberry Pi 5
+# Copy project files
+# -----------------------------
+COPY . /app
+
+# -----------------------------
+# Blinka environment variables
+# -----------------------------
 ENV BLINKA_FORCEBOARD=RASPBERRY_PI_5
 ENV BLINKA_FORCECHIP=BCM2712
 ENV BLINKA_USE_LGPIO=1
 ENV PYTHONUNBUFFERED=1
 
 # -----------------------------
-# Run the main script
+# Run main script
+# -----------------------------
 CMD ["python3", "system_convert.py"]
