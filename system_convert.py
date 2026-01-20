@@ -1,14 +1,14 @@
 import os
-import sys
 import sqlite3
 import time
+import sys
 
 # -----------------------------
 # Force Blinka to support Raspberry Pi 5
 # -----------------------------
-os.environ["BLINKA_FORCECHIP"] = "BCM2711"       # Treat as Pi 4
-os.environ["BLINKA_FORCEBOARD"] = "RASPBERRY_PI_4"
-os.environ["BLINKA_USE_RPI_GPIO"] = "1"
+os.environ["BLINKA_FORCECHIP"] = "BCM2712"       # Treat Pi5 as Pi4
+os.environ["BLINKA_FORCEBOARD"] = "RASPBERRY_PI_5"
+os.environ["BLINKA_USE_RPI_GPIO"] = "1"         # Use RPi.GPIO instead of lgpio
 
 # -----------------------------
 # ENCODING SETUP
@@ -58,9 +58,10 @@ try:
     import adafruit_ads1x15.ads1115 as ADS
     from adafruit_ads1x15.analog_in import AnalogIn
 
+    # Initialize I2C and ADS1115
     i2c = busio.I2C(board.SCL, board.SDA)
     ads = ADS.ADS1115(i2c)
-    ads.gain = 1  # 1x gain, adjust if needed
+    ads.gain = 1
 
     bp_channel = AnalogIn(ads, 0)
     fp_channel = AnalogIn(ads, 1)
@@ -91,7 +92,6 @@ def read_raw_values():
         return None
 
 def convert_to_pressure(raw):
-    """Convert raw ADC value to pressure (example 0-10 bar)."""
     return round((raw / 32767) * 10, 2)
 
 # -----------------------------
@@ -108,7 +108,7 @@ while True:
 
     pressures = tuple(convert_to_pressure(r) for r in raw)
 
-    # Optional: check last record to avoid duplicate entries
+    # Avoid duplicate entries
     cursor.execute("""
         SELECT bp_pressure, fp_pressure, cr_pressure, bc_pressure
         FROM brake_pressure_log
