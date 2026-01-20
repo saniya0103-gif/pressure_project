@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11-bullseye
 
 # Install system dependencies
 RUN apt-get update && \
@@ -8,6 +8,8 @@ RUN apt-get update && \
         python3-dev \
         gcc \
         libgpiod2 \
+        python3-pip \
+        build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
