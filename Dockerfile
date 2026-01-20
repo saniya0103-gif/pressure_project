@@ -1,17 +1,13 @@
 FROM python:3.11-bullseye
 
 # Install system dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
         apt-utils \
         i2c-tools \
         python3-dev \
         gcc \
         libgpiod2 \
-        python3-pip \
         build-essential \
-        lgpio \
-        python3-lgpio \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -19,7 +15,7 @@ WORKDIR /app
 # Upgrade pip
 RUN python3 -m pip install --upgrade pip
 
-# Install Python libraries
+# Install Python packages (including lgpio for Blinka)
 RUN python3 -m pip install \
     smbus2 \
     paho-mqtt \
@@ -27,7 +23,8 @@ RUN python3 -m pip install \
     pytz \
     AWSIoTPythonSDK \
     adafruit-blinka \
-    adafruit-circuitpython-ads1x15
+    adafruit-circuitpython-ads1x15 \
+    lgpio
 
 # Copy project files
 COPY . /app
