@@ -1,8 +1,7 @@
-FROM python:3.11-bullseye
+FROM ghcr.io/raspberrypi/rpi-python:3.11
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        apt-utils \
         i2c-tools \
         python3-dev \
         gcc \
@@ -15,7 +14,7 @@ WORKDIR /app
 # Upgrade pip
 RUN python3 -m pip install --upgrade pip
 
-# Install Python packages (including lgpio for Blinka)
+# Install Python packages (no lgpio pip install)
 RUN python3 -m pip install \
     smbus2 \
     paho-mqtt \
@@ -23,8 +22,7 @@ RUN python3 -m pip install \
     pytz \
     AWSIoTPythonSDK \
     adafruit-blinka \
-    adafruit-circuitpython-ads1x15 \
-    lgpio
+    adafruit-circuitpython-ads1x15
 
 # Copy project files
 COPY . /app
