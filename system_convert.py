@@ -1,35 +1,23 @@
-import os
 import sqlite3
 import time
+import os
 import sys
 
-# -----------------------------
-# Force Blinka to support Raspberry Pi 5
-# -----------------------------
-os.environ["BLINKA_FORCECHIP"] = "BCM2712"       # Treat Pi5 as Pi4
-os.environ["BLINKA_FORCEBOARD"] = "RASPBERRY_PI_5"
-os.environ["BLINKA_USE_RPI_GPIO"] = "1"         # Use RPi.GPIO instead of lgpio
-
-# -----------------------------
-# ENCODING SETUP
-# -----------------------------
+# ---------------- ENCODING SETUP ----------------
 sys.stdout.reconfigure(encoding='utf-8')
 
-# -----------------------------
-# PATH SETUP
-# -----------------------------
-BASE_PATH = os.path.dirname(os.path.abspath(__file__))
+# ---------------- DYNAMIC PATHS ----------------
+BASE_PATH = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspath(__file__))
 DB_FOLDER = os.path.join(BASE_PATH, "db")
 DB_PATH   = os.path.join(DB_FOLDER, "project.db")
 
 print(f"Database folder: {DB_FOLDER}", flush=True)
 print(f"Database file: {DB_PATH}", flush=True)
 
+# Ensure DB folder exists
 os.makedirs(DB_FOLDER, exist_ok=True)
 
-# -----------------------------
-# DATABASE SETUP
-# -----------------------------
+# ---------------- DATABASE SETUP ----------------
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 conn.row_factory = sqlite3.Row
 cursor = conn.cursor()
@@ -47,10 +35,8 @@ CREATE TABLE IF NOT EXISTS brake_pressure_log (
 """)
 conn.commit()
 
-# -----------------------------
-# ADS1115 SETUP
-# -----------------------------
-ADS_AVAILABLE = False
+# ---------------- ADS1115 SETUP ----------------
+ADS_AVAILABLE = True
 
 try:
     import board
@@ -58,57 +44,51 @@ try:
     import adafruit_ads1x15.ads1115 as ADS
     from adafruit_ads1x15.analog_in import AnalogIn
 
-    # Initialize I2C and ADS1115
+    # Initialize I2C
     i2c = busio.I2C(board.SCL, board.SDA)
+
+    # Initialize ADS1115
     ads = ADS.ADS1115(i2c)
     ads.gain = 1
 
+    # ADS1115 Channels
     bp_channel = AnalogIn(ads, 0)
     fp_channel = AnalogIn(ads, 1)
     cr_channel = AnalogIn(ads, 2)
     bc_channel = AnalogIn(ads, 3)
 
-    ADS_AVAILABLE = True
-    print("✅ ADS1115 CONNECTED and initialized", flush=True)
-
 except Exception as e:
-    print(f"❌ ADS1115 NOT CONNECTED: {e}", flush=True)
+    print("⚠️ ADS1115 sensor not found. Using dummy zeros.", flush=True)
+    ADS_AVAILABLE = False
 
-# -----------------------------
-# SENSOR FUNCTIONS
-# -----------------------------
+# ---------------- SENSOR FUNCTIONS ----------------
 def read_raw_values():
-    if not ADS_AVAILABLE:
-        return None
-    try:
+    if ADS_AVAILABLE:
         return (
             bp_channel.value,
             fp_channel.value,
             cr_channel.value,
             bc_channel.value
         )
-    except Exception as e:
-        print(f"⚠️ ADS1115 READ FAILED: {e}", flush=True)
-        return None
+    else:
+        return (0, 0, 0, 0)
 
 def convert_to_pressure(raw):
+    # Convert raw ADC value to pressure (0–10 bar example)
     return round((raw / 32767) * 10, 2)
 
-# -----------------------------
-# MAIN LOOP
-# -----------------------------
-print("\nSystem started... Logging data every 10 seconds\n", flush=True)
+def get_pressures():
+    raw = read_raw_values()
+    pressures = tuple(convert_to_pressure(r) for r in raw)
+    return raw, pressures
+
+# ---------------- MAIN LOOP ----------------
+print("\nSystem started... Logging data every 20 seconds\n", flush=True)
 
 while True:
-    raw = read_raw_values()
-    if raw is None:
-        print("❌ ADS DATA INVALID — skipping DB insert", flush=True)
-        time.sleep(10)
-        continue
+    raw_values, pressures = get_pressures()
 
-    pressures = tuple(convert_to_pressure(r) for r in raw)
-
-    # Avoid duplicate entries
+    # Fetch last row
     cursor.execute("""
         SELECT bp_pressure, fp_pressure, cr_pressure, bc_pressure
         FROM brake_pressure_log
@@ -117,6 +97,7 @@ while True:
     """)
     last = cursor.fetchone()
 
+    # Insert only if values changed >= 0.5 bar
     if not last or any(abs(n - l) >= 0.5 for n, l in zip(pressures, last)):
         cursor.execute("""
             INSERT INTO brake_pressure_log
@@ -125,10 +106,11 @@ while True:
         """, pressures)
         conn.commit()
 
+    # Print values
     print(
-        f"ADS STATUS: {'CONNECTED' if ADS_AVAILABLE else 'NOT CONNECTED'}\n"
         f"RAW VALUES\n"
-        f"BP:{raw[0]} | FP:{raw[1]} | CR:{raw[2]} | BC:{raw[3]}\n"
+        f"BP:{raw_values[0]} | FP:{raw_values[1]} | "
+        f"CR:{raw_values[2]} | BC:{raw_values[3]}\n"
         f"PRESSURE VALUES\n"
         f"BP:{pressures[0]} bar | FP:{pressures[1]} bar | "
         f"CR:{pressures[2]} bar | BC:{pressures[3]} bar\n"
