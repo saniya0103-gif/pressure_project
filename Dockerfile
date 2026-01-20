@@ -5,13 +5,16 @@ RUN apt-get update && apt-get install -y \
     i2c-tools \
     python3-dev \
     gcc \
-    adafruit-blinka \
-    adafruit-circuitpython-ads1x15
+     libgpiod2 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-RUN pip install --upgrade pip
+#RUN pip install --upgrade pip
+
+# Upgrade pip
+# -----------------------------
+RUN python3 -m pip install --upgrade pip
 
 # Install ONLY required Python libs
 RUN pip install \
@@ -19,7 +22,9 @@ RUN pip install \
     paho-mqtt \
     requests \
     pytz \
-    AWSIoTPythonSDK
+    AWSIoTPythonSDK \
+    adafruit-blinka \
+    adafruit-circuitpython-ads1x15
 
 COPY . /app
 
@@ -34,4 +39,4 @@ ENV BLINKA_USE_LGPIO=1
 # -----------------------------
 # Run your main script
 
-CMD ["python", "system_convert.py"]
+CMD ["python3", "system_convert.py"]
