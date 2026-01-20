@@ -1,17 +1,21 @@
-# Raspberry Pi compatible Python 3.11 base image
+# -----------------------------
+# Base image: official Python 3.11 Debian slim for ARM
+# -----------------------------
 FROM python:3.11-bullseye
 
 # -----------------------------
-# Install system dependencies for I2C, GPIO, and lgpio
+# Install system dependencies
 # -----------------------------
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    i2c-tools \
-    python3-dev \
-    gcc \
-    libgpiod2 \
-    build-essential \
-    swig \
-    python3-pip \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        i2c-tools \
+        python3-dev \
+        gcc \
+        build-essential \
+        swig \
+        liblgpio-dev \
+        libgpiod2 \
+        python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------
@@ -25,13 +29,17 @@ WORKDIR /app
 RUN python3 -m pip install --upgrade pip
 
 # -----------------------------
-# Copy requirements.txt and install Python dependencies
+# Copy requirements.txt (if you have one)
 # -----------------------------
 COPY requirements.txt /app/
+
+# -----------------------------
+# Install Python dependencies
+# -----------------------------
 RUN python3 -m pip install -r requirements.txt
 
 # -----------------------------
-# Copy project files
+# Copy your project files
 # -----------------------------
 COPY . /app
 
@@ -44,6 +52,6 @@ ENV BLINKA_USE_LGPIO=1
 ENV PYTHONUNBUFFERED=1
 
 # -----------------------------
-# Run main script
+# Default command to run your main script
 # -----------------------------
 CMD ["python3", "system_convert.py"]
