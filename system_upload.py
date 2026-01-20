@@ -109,9 +109,12 @@ def upload_to_aws(row):
 
     if result.rc == mqtt.MQTT_ERR_SUCCESS:
         print(
-            f"➡️ Uploaded | id={row['id']} created_at={row['created_at']} | "
-            f"BP={row['bp_pressure']} | FP={row['fp_pressure']} | "
-            f"CR={row['cr_pressure']} | BC={row['bc_pressure']}"
+            f"➡️ Uploaded | id={row['id']} | "
+            f"BP={row['bp_pressure']} bar | "
+            f"FP={row['fp_pressure']} bar | "
+            f"CR={row['cr_pressure']} bar | "
+            f"BC={row['bc_pressure']} bar | "
+            f"created_at={row['created_at']}"
         )
         return True
     else:
@@ -137,6 +140,7 @@ while True:
         if not success:
             print("Upload failed, will retry later.")
             break
+
         time.sleep(2)
 
         cursor.execute(
@@ -146,7 +150,10 @@ while True:
         conn.commit()
 
         print(
-            f"✅ Marked uploaded | id={row['id']} created_at={row['created_at']} | "
-            f"BP={row['bp_pressure']} | FP={row['fp_pressure']} | "
-            f"CR={row['cr_pressure']} | BC={row['bc_pressure']}"
+            f"✅ Marked uploaded | id={row['id']} | "
+            f"BP={row['bp_pressure']} bar | "
+            f"FP={row['fp_pressure']} bar | "
+            f"CR={row['cr_pressure']} bar | "
+            f"BC={row['bc_pressure']} bar | "
+            f"created_at={row['created_at']}"
         )
