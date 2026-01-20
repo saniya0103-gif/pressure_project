@@ -7,17 +7,16 @@ import sys
 import paho.mqtt.client as mqtt
 
 # ================= BASE PATH =================
-#BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "db", "project.db")  # <-- write to mounted db folder
+DB_PATH = os.path.join(BASE_DIR, "db", "project.db")  # Mounted db folder in Docker
 CERT_DIR = os.path.join(BASE_DIR, "aws_iot")
 
-# AWS IoT certificate files
+# ================= AWS IoT CERTIFICATES =================
 ROOT_CA = os.path.join(CERT_DIR, "AmazonRootCA1.pem")
 CERT_FILE = os.path.join(CERT_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt")
 KEY_FILE = os.path.join(CERT_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key")
 
-# AWS IoT settings
+# ================= AWS IoT SETTINGS =================
 AWS_ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 CLIENT_ID = "Raspberry"
 TOPIC = "brake/pressure"
@@ -71,7 +70,7 @@ client.loop_start()
 
 # ================= DATABASE =================
 try:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 except sqlite3.OperationalError as e:
     print("❌ Unable to open database:", e)
     sys.exit(1)
@@ -111,7 +110,7 @@ try:
 
                 if result.rc == mqtt.MQTT_ERR_SUCCESS:
                     print(f"Sent to AWS IoT: {payload}")
-                    # Mark as uploaded
+                    # ✅ Correctly mark as uploaded
                     cur.execute(
                         "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
                         (row["id"],)
