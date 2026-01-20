@@ -1,21 +1,20 @@
 # -----------------------------
-# Dockerfile for Raspberry Pi 5
+# Base image
 # -----------------------------
-
 FROM python:3.11-bullseye
 
 # -----------------------------
 # Install system dependencies
 # -----------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
+    i2c-tools \
     build-essential \
     python3-dev \
     gcc \
     swig \
     libgpiod2 \
-    i2c-tools \
     python3-pip \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------
@@ -24,18 +23,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # -----------------------------
-# Clone and build lgpio C library
+# Upgrade pip
 # -----------------------------
-RUN git clone https://github.com/wiringPi/lgpio.git /tmp/lgpio && \
-    cd /tmp/lgpio && \
-    make && make install && \
-    rm -rf /tmp/lgpio
+RUN python3 -m pip install --upgrade pip
 
 # -----------------------------
-# Upgrade pip and install Python libraries
+# Copy requirements and install
 # -----------------------------
 COPY requirements.txt /app/
-RUN python3 -m pip install --upgrade pip
 RUN python3 -m pip install -r requirements.txt
 
 # -----------------------------
