@@ -8,17 +8,15 @@ import paho.mqtt.client as mqtt
 
 # ================= BASE PATH =================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Correct DB path inside the 'db' folder
 DB_PATH = os.path.join(BASE_DIR, "db", "project.db")
 CERT_DIR = os.path.join(BASE_DIR, "aws_iot")
 
-# Actual certificate filenames from your aws_iot folder
+# AWS IoT certificate files
 ROOT_CA = os.path.join(CERT_DIR, "AmazonRootCA1.pem")
 CERT_FILE = os.path.join(CERT_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt")
 KEY_FILE = os.path.join(CERT_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key")
 
-# ================= AWS CONFIG =================
+# AWS IoT settings
 AWS_ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 CLIENT_ID = "Raspberry"
 TOPIC = "brake/pressure"
@@ -34,8 +32,7 @@ for f in [ROOT_CA, CERT_FILE, KEY_FILE]:
         missing = True
 
 if missing:
-    print("\n❌ AWS IoT certificates are mandatory for port 8883")
-    print("👉 Place files inside aws_iot/ directory")
+    print("\n❌ AWS IoT certificates are mandatory")
     sys.exit(1)
 
 if not os.path.exists(DB_PATH):
@@ -62,8 +59,8 @@ def on_connect(client, userdata, flags, rc):
 
 client.on_connect = on_connect
 
-print("Connecting to AWS IoT Core...")
 try:
+    print("Connecting to AWS IoT Core...")
     client.connect(AWS_ENDPOINT, PORT)
 except Exception as e:
     print("❌ MQTT Connection Error:", e)
@@ -84,6 +81,7 @@ cur = conn.cursor()
 # ================= MAIN LOOP =================
 try:
     while True:
+        # Fetch pending rows, oldest first
         cur.execute("""
             SELECT *
             FROM brake_pressure_log
@@ -111,21 +109,17 @@ try:
                 result = client.publish(TOPIC, json.dumps(payload), qos=1)
 
                 if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                    print("Sent to AWS IoT:", payload)
-
+                    print(f"Sent to AWS IoT: {payload}")
+                    # Mark as uploaded
                     cur.execute(
                         "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
                         (row["id"],)
                     )
                     conn.commit()
-
-                    print(
-                        f"Uploaded and marked DB uploaded=1 | "
-                        f"Timestamp: {row['created_at']}"
-                    )
+                    print(f"Uploaded and marked ROW id = {row['id']} | Timestamp: {row['created_at']}")
                     print("Data published to AWS IoT\n")
                 else:
-                    print("❌ Publish failed, retry later")
+                    print("❌ Publish failed, will retry later")
                     break
 
             except Exception as e:
