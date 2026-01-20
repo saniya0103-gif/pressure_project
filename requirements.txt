@@ -4,8 +4,8 @@ boto3
 requests
 pandas
 flask
-#adafruit-blinka
-#adafruit-circuitpython-ads1x15
+adafruit-blinka
+adafruit-circuitpython-ads1x15
 numpy
 paho-mqtt
 lgpio
