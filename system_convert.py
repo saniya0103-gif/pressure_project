@@ -1,7 +1,7 @@
-import sqlite3
-import time
 import os
 import sys
+import time
+import sqlite3
 
 # ---------------- ENCODING SETUP ----------------
 sys.stdout.reconfigure(encoding='utf-8')
@@ -9,7 +9,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 # ---------------- PATH SETUP ----------------
 BASE_PATH = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspath(__file__))
 DB_FOLDER = os.path.join(BASE_PATH, "db")
-DB_PATH   = os.path.join(DB_FOLDER, "project.db")
+DB_PATH = os.path.join(DB_FOLDER, "project.db")
 
 print(f"Database folder: {DB_FOLDER}", flush=True)
 print(f"Database file: {DB_PATH}", flush=True)
@@ -37,6 +37,11 @@ conn.commit()
 # ---------------- ADS1115 SETUP ----------------
 ADS_AVAILABLE = False
 
+# Force Blinka to use RPi.GPIO in case lgpio fails
+os.environ["BLINKA_FORCECHIP"] = "BCM2712"
+os.environ["BLINKA_FORCEBOARD"] = "RASPBERRY_PI_5"
+os.environ["BLINKA_USE_RPI_GPIO"] = "1"
+
 try:
     import board
     import busio
@@ -57,39 +62,37 @@ try:
 
 except Exception as e:
     print(f"❌ ADS1115 NOT CONNECTED: {e}", flush=True)
+    # Use dummy channels that return 0 if ADS is not available
+    class DummyChannel:
+        @property
+        def value(self):
+            return 0
+        @property
+        def voltage(self):
+            return 0.0
+    bp_channel = fp_channel = cr_channel = bc_channel = DummyChannel()
 
 # ---------------- SENSOR FUNCTIONS ----------------
 def read_raw_values():
-    if not ADS_AVAILABLE:
-        return None
-
-    try:
-        return (
-            bp_channel.value,
-            fp_channel.value,
-            cr_channel.value,
-            bc_channel.value
-        )
-    except Exception as e:
-        print(f"⚠️ ADS1115 READ FAILED: {e}", flush=True)
-        return None
+    return (
+        bp_channel.value,
+        fp_channel.value,
+        cr_channel.value,
+        bc_channel.value
+    )
 
 def convert_to_pressure(raw):
-    return round((raw / 32767) * 10, 2)
+    # Convert raw ADC value to pressure (assuming 16-bit ADC)
+    return round((raw / 32767) * 10, 2) if raw else 0
 
 # ---------------- MAIN LOOP ----------------
 print("\nSystem started... Logging data every 10 seconds\n", flush=True)
 
 while True:
     raw = read_raw_values()
-
-    if raw is None:
-        print("❌ ADS DATA INVALID — skipping DB insert", flush=True)
-        time.sleep(10)
-        continue
-
     pressures = tuple(convert_to_pressure(r) for r in raw)
 
+    # Check last DB entry to avoid duplicates
     cursor.execute("""
         SELECT bp_pressure, fp_pressure, cr_pressure, bc_pressure
         FROM brake_pressure_log
