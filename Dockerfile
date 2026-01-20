@@ -1,8 +1,8 @@
-FROM balenalib/raspberrypi-debian:bullseye-python3
+FROM python:3.11-slim-bullseye
 
 WORKDIR /app
 
-# Install system dependencies
+# System dependencies for I2C and GPIO
 RUN apt-get update && apt-get install -y --no-install-recommends \
     i2c-tools \
     python3-dev \
@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Upgrade pip
 RUN python3 -m pip install --upgrade pip
 
-# Install Python requirements
+# Install Python libraries from requirements.txt
 COPY requirements.txt /app/
 RUN python3 -m pip install -r requirements.txt
 
@@ -27,4 +27,5 @@ ENV BLINKA_FORCECHIP=BCM2712
 ENV BLINKA_USE_LGPIO=1
 ENV PYTHONUNBUFFERED=1
 
+# Run the main script
 CMD ["python3", "system_convert.py"]
