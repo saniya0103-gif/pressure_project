@@ -1,4 +1,4 @@
-# Use official Python slim image
+# Base Python image
 FROM python:3.11-slim
 
 # -----------------------------
@@ -12,12 +12,12 @@ RUN apt-get update && \
         gcc \
         build-essential \
         swig \
-        libgpiod2 \
+        libgpiod-dev \
         python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------
-# Install lgpio from source
+# Build lgpio from source
 # -----------------------------
 RUN git clone https://github.com/wiringPi/lgpio.git /tmp/lgpio && \
     cd /tmp/lgpio && \
@@ -31,13 +31,13 @@ RUN git clone https://github.com/wiringPi/lgpio.git /tmp/lgpio && \
 RUN python3 -m pip install --upgrade pip
 
 # -----------------------------
-# Install Python packages (from requirements.txt)
+# Install Python packages from requirements.txt
 # -----------------------------
 COPY requirements.txt /app/
 RUN python3 -m pip install -r /app/requirements.txt
 
 # -----------------------------
-# Set working directory and copy project
+# Copy project files
 # -----------------------------
 WORKDIR /app
 COPY . /app
