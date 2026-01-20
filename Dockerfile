@@ -10,6 +10,8 @@ RUN apt-get update && \
         libgpiod2 \
         python3-pip \
         build-essential \
+        lgpio \
+        python3-lgpio \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
