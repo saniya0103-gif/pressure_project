@@ -1,75 +1,68 @@
 import sqlite3
 import time
-import os
-import sys
 import json
-import ssl
-import paho.mqtt.client as mqtt
+import os
 
-# ---------------- STDOUT ----------------
-sys.stdout.reconfigure(encoding="utf-8")
+from awsiotsdk import mqtt_connection_builder
+from awscrt import mqtt
 
 # ---------------- BASE PATH ----------------
-BASE_PATH = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspath(__file__))
+BASE_PATH = "/home/pi_123/data/src/pressure_project"
 
-# ---------------- DATABASE ----------------
+# ---------------- DATABASE PATH ----------------
 DB_PATH = os.path.join(BASE_PATH, "db", "project.db")
 
-# ---------------- AWS CERT PATHS (FIXED) ----------------
+# ---------------- AWS CERTIFICATE PATHS ----------------
 AWS_IOT_DIR = os.path.join(BASE_PATH, "aws_iot")
 
-ROOT_CA = os.path.join(AWS_IOT_DIR, "AmazonRootCA1.pem")
-CERT_FILE = os.path.join(
+CERT_PATH = os.path.join(
     AWS_IOT_DIR,
     "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"
 )
-KEY_FILE = os.path.join(
+KEY_PATH = os.path.join(
     AWS_IOT_DIR,
     "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
 )
+CA_PATH = os.path.join(AWS_IOT_DIR, "AmazonRootCA1.pem")
 
-# ---------------- CHECK FILES ----------------
-for f in [DB_PATH, ROOT_CA, CERT_FILE, KEY_FILE]:
+# ---------------- VERIFY FILES ----------------
+for f in [DB_PATH, CERT_PATH, KEY_PATH, CA_PATH]:
     if not os.path.exists(f):
-        print("❌ Missing file:", f, flush=True)
-        sys.exit(1)
+        print("❌ Missing file:", f)
+        exit(1)
 
-print("✅ Database and certificates verified", flush=True)
+print("✅ Database & certificates verified")
 
-# ---------------- AWS SETTINGS ----------------
-AWS_ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"  # <-- PUT YOUR ENDPOINT
-AWS_PORT = 8883
-CLIENT_ID = "Raspberry"
-TOPIC = "brake/pressure"
+# ---------------- MQTT CONFIG ----------------
+ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
+CLIENT_ID = "RaspberryPi_Pressure"
+TOPIC     = "brake/pressure"
 
-# ---------------- DB CONNECTION ----------------
+# ---------------- CONNECT TO AWS IOT ----------------
+def connect_mqtt():
+    mqtt_connection = mqtt_connection_builder.mtls_from_path(
+        endpoint=ENDPOINT,
+        cert_filepath=CERT_PATH,
+        pri_key_filepath=KEY_PATH,
+        ca_filepath=CA_PATH,
+        client_id=CLIENT_ID,
+        clean_session=False,
+        keep_alive_secs=30
+    )
+    print("Connecting to AWS IoT Core...")
+    mqtt_connection.connect().result()
+    print("✅ Connected to AWS IoT Core")
+    return mqtt_connection
+
+mqtt_connection = connect_mqtt()
+
+# ---------------- DATABASE SETUP ----------------
 conn = sqlite3.connect(DB_PATH, timeout=10)
 conn.row_factory = sqlite3.Row
-cur = conn.cursor()
+cursor = conn.cursor()
 
-# ---------------- MQTT CALLBACK ----------------
-def on_connect(client, userdata, flags, rc):
-    if rc == 0:
-        print("✅ Connected to AWS IoT Core", flush=True)
-    else:
-        print("❌ MQTT connection failed RC:", rc, flush=True)
-
-# ---------------- MQTT CLIENT ----------------
-client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
-client.on_connect = on_connect
-
-client.tls_set(
-    ca_certs=ROOT_CA,
-    certfile=CERT_FILE,
-    keyfile=KEY_FILE,
-    tls_version=ssl.PROTOCOL_TLSv1_2
-)
-
-client.connect(AWS_ENDPOINT, AWS_PORT, 60)
-client.loop_start()
-
-# ---------------- UPLOAD FUNCTION ----------------
-def upload_to_aws(row):
+# ---------------- AWS UPLOAD FUNCTION ----------------
+def upload_to_app(row):
     payload = {
         "id": row["id"],
         "bp": row["bp_pressure"],
@@ -79,37 +72,35 @@ def upload_to_aws(row):
         "timestamp": row["created_at"]
     }
 
-    result = client.publish(TOPIC, json.dumps(payload), qos=1)
-    result.wait_for_publish()
+    mqtt_connection.publish(
+        topic=TOPIC,
+        payload=json.dumps(payload),
+        qos=mqtt.QoS.AT_LEAST_ONCE
+    )
 
-    return result.rc == mqtt.MQTT_ERR_SUCCESS
+    print(f"⬆️ Uploaded ID {row['id']}")
+    return True
 
 # ---------------- MAIN LOOP ----------------
 while True:
-    cur.execute("""
+    cursor.execute("""
         SELECT *
         FROM brake_pressure_log
         WHERE uploaded = 0
         ORDER BY created_at ASC
-        LIMIT 5
+        LIMIT 1
     """)
-    rows = cur.fetchall()
+    row = cursor.fetchone()
 
-    if not rows:
-        print("✅ No pending rows", flush=True)
-        time.sleep(5)
-        continue
-
-    for row in rows:
-        if upload_to_aws(row):
-            cur.execute(
+    if row:
+        if upload_to_app(row):
+            cursor.execute(
                 "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
                 (row["id"],)
             )
             conn.commit()
-            print(f"⬆️ Uploaded & marked ID {row['id']}", flush=True)
-        else:
-            print("❌ Upload failed, retry later", flush=True)
-            break
+            print(f"✅ Row {row['id']} marked uploaded")
+    else:
+        print("✅ No pending rows to upload")
 
-    time.sleep(2)
+    time.sleep(5)
