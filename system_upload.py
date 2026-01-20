@@ -3,17 +3,26 @@ import sqlite3
 import time
 import json
 import ssl
-import paho.mqtt.client as mqtt
 import os
+import paho.mqtt.client as mqtt
+import sys
 
-# ---------------- PATHS ----------------
-BASE_PATH = "/home/pi_123/data/src/pressure_project"
+# ---------------- ENCODING SETUP ----------------
+sys.stdout.reconfigure(encoding='utf-8')
+
+# ---------------- DYNAMIC PATHS ----------------
+BASE_PATH = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspath(__file__))
+DB_FOLDER = os.path.join(BASE_PATH, "db")
+DB_PATH   = os.path.join(DB_FOLDER, "project.db")
 AWS_PATH  = os.path.join(BASE_PATH, "aws_iot")
-DB_PATH   = os.path.join(BASE_PATH, "db", "project.db")
 
+print(f"Database folder: {DB_FOLDER}", flush=True)
+print(f"Database file: {DB_PATH}", flush=True)
+
+# ---------------- AWS CERT PATHS ----------------
 CERT_PATH = os.path.join(AWS_PATH, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt")
 KEY_PATH  = os.path.join(AWS_PATH, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key")
-CA_PATH   = os.path.join(AWS_PATH, "AmazonRootCA1.pem")  # Make sure this matches your certificate
+CA_PATH   = os.path.join(AWS_PATH, "AmazonRootCA1.pem")  # make sure this exists
 
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
@@ -24,14 +33,14 @@ TOPIC     = "brake/pressure"
 # ---------------- MQTT CALLBACKS ----------------
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        print("✅ Connected to AWS IoT Core")
+        print("✅ Connected to AWS IoT Core", flush=True)
     else:
-        print("❌ MQTT connection failed, RC =", rc)
+        print(f"❌ MQTT connection failed, RC={rc}", flush=True)
 
 def on_publish(client, userdata, mid):
-    print("📤 Data published to AWS IoT")
+    print("📤 Data published to AWS IoT", flush=True)
 
-# ---------------- CONNECT TO AWS IOT ----------------
+# ---------------- CONNECT TO AWS ----------------
 def connect_mqtt():
     try:
         client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
@@ -45,23 +54,25 @@ def connect_mqtt():
             tls_version=ssl.PROTOCOL_TLSv1_2
         )
 
+        print("Connecting to AWS IoT Core...", flush=True)
         client.connect(ENDPOINT, PORT, keepalive=60)
         client.loop_start()
         return client
     except Exception as e:
-        print("❌ MQTT connection failed:", e)
+        print(f"❌ MQTT connection failed: {e}", flush=True)
         return None
 
-# ---------------- WAIT FOR CONNECTION ----------------
+# ---------------- WAIT FOR MQTT CONNECTION ----------------
 mqtt_client = None
 while mqtt_client is None:
     mqtt_client = connect_mqtt()
     if mqtt_client is None:
-        print("Retrying in 5 seconds...")
+        print("Retrying MQTT connection in 5 seconds...", flush=True)
         time.sleep(5)
 
 # ---------------- DATABASE SETUP ----------------
-conn = sqlite3.connect(DB_PATH)
+os.makedirs(DB_FOLDER, exist_ok=True)
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
@@ -76,10 +87,10 @@ def upload_to_app(row):
             "created_at": row["created_at"]
         }
         mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-        print(f"Sent to AWS IoT: {payload}")
+        print(f"Sent to AWS IoT: {payload}", flush=True)
         return True
     except Exception as e:
-        print("Upload failed:", e)
+        print(f"❌ Upload failed: {e}", flush=True)
         return False
 
 # ---------------- MAIN LOOP ----------------
@@ -99,8 +110,8 @@ while True:
                 (row['id'],)
             )
             conn.commit()
-            print(f"Row {row['id']} marked uploaded (0)")
+            print(f"Row {row['id']} marked uploaded ✅", flush=True)
     else:
-        print("No data to upload")
+        print("No data to upload", flush=True)
 
     time.sleep(2)
