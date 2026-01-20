@@ -1,27 +1,29 @@
-# -----------------------------
-# Base image: official Python 3.11 Debian slim for ARM
-# -----------------------------
-FROM python:3.11-bullseye
+# Use official Python slim image
+FROM python:3.11-slim
 
 # -----------------------------
 # Install system dependencies
 # -----------------------------
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+        git \
         i2c-tools \
         python3-dev \
         gcc \
         build-essential \
         swig \
-        liblgpio-dev \
         libgpiod2 \
         python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------
-# Set working directory
+# Install lgpio from source
 # -----------------------------
-WORKDIR /app
+RUN git clone https://github.com/wiringPi/lgpio.git /tmp/lgpio && \
+    cd /tmp/lgpio && \
+    make && \
+    make install && \
+    rm -rf /tmp/lgpio
 
 # -----------------------------
 # Upgrade pip
@@ -29,18 +31,15 @@ WORKDIR /app
 RUN python3 -m pip install --upgrade pip
 
 # -----------------------------
-# Copy requirements.txt (if you have one)
+# Install Python packages (from requirements.txt)
 # -----------------------------
 COPY requirements.txt /app/
+RUN python3 -m pip install -r /app/requirements.txt
 
 # -----------------------------
-# Install Python dependencies
+# Set working directory and copy project
 # -----------------------------
-RUN python3 -m pip install -r requirements.txt
-
-# -----------------------------
-# Copy your project files
-# -----------------------------
+WORKDIR /app
 COPY . /app
 
 # -----------------------------
@@ -52,6 +51,6 @@ ENV BLINKA_USE_LGPIO=1
 ENV PYTHONUNBUFFERED=1
 
 # -----------------------------
-# Default command to run your main script
+# Run main script
 # -----------------------------
 CMD ["python3", "system_convert.py"]
