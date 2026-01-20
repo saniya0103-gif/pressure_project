@@ -1,22 +1,35 @@
 import os
 import sys
-import time
 import sqlite3
+import time
 
-# ---------------- ENCODING SETUP ----------------
+# -----------------------------
+# Force Blinka to support Raspberry Pi 5
+# -----------------------------
+os.environ["BLINKA_FORCECHIP"] = "BCM2711"       # Treat as Pi 4
+os.environ["BLINKA_FORCEBOARD"] = "RASPBERRY_PI_4"
+os.environ["BLINKA_USE_RPI_GPIO"] = "1"
+
+# -----------------------------
+# ENCODING SETUP
+# -----------------------------
 sys.stdout.reconfigure(encoding='utf-8')
 
-# ---------------- PATH SETUP ----------------
-BASE_PATH = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspath(__file__))
+# -----------------------------
+# PATH SETUP
+# -----------------------------
+BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 DB_FOLDER = os.path.join(BASE_PATH, "db")
-DB_PATH = os.path.join(DB_FOLDER, "project.db")
+DB_PATH   = os.path.join(DB_FOLDER, "project.db")
 
 print(f"Database folder: {DB_FOLDER}", flush=True)
 print(f"Database file: {DB_PATH}", flush=True)
 
 os.makedirs(DB_FOLDER, exist_ok=True)
 
-# ---------------- DATABASE SETUP ----------------
+# -----------------------------
+# DATABASE SETUP
+# -----------------------------
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 conn.row_factory = sqlite3.Row
 cursor = conn.cursor()
@@ -34,13 +47,10 @@ CREATE TABLE IF NOT EXISTS brake_pressure_log (
 """)
 conn.commit()
 
-# ---------------- ADS1115 SETUP ----------------
+# -----------------------------
+# ADS1115 SETUP
+# -----------------------------
 ADS_AVAILABLE = False
-
-# Force Blinka to use RPi.GPIO in case lgpio fails
-os.environ["BLINKA_FORCECHIP"] = "BCM2712"
-os.environ["BLINKA_FORCEBOARD"] = "RASPBERRY_PI_5"
-os.environ["BLINKA_USE_RPI_GPIO"] = "1"
 
 try:
     import board
@@ -50,7 +60,7 @@ try:
 
     i2c = busio.I2C(board.SCL, board.SDA)
     ads = ADS.ADS1115(i2c)
-    ads.gain = 1
+    ads.gain = 1  # 1x gain, adjust if needed
 
     bp_channel = AnalogIn(ads, 0)
     fp_channel = AnalogIn(ads, 1)
@@ -62,37 +72,43 @@ try:
 
 except Exception as e:
     print(f"❌ ADS1115 NOT CONNECTED: {e}", flush=True)
-    # Use dummy channels that return 0 if ADS is not available
-    class DummyChannel:
-        @property
-        def value(self):
-            return 0
-        @property
-        def voltage(self):
-            return 0.0
-    bp_channel = fp_channel = cr_channel = bc_channel = DummyChannel()
 
-# ---------------- SENSOR FUNCTIONS ----------------
+# -----------------------------
+# SENSOR FUNCTIONS
+# -----------------------------
 def read_raw_values():
-    return (
-        bp_channel.value,
-        fp_channel.value,
-        cr_channel.value,
-        bc_channel.value
-    )
+    if not ADS_AVAILABLE:
+        return None
+    try:
+        return (
+            bp_channel.value,
+            fp_channel.value,
+            cr_channel.value,
+            bc_channel.value
+        )
+    except Exception as e:
+        print(f"⚠️ ADS1115 READ FAILED: {e}", flush=True)
+        return None
 
 def convert_to_pressure(raw):
-    # Convert raw ADC value to pressure (assuming 16-bit ADC)
-    return round((raw / 32767) * 10, 2) if raw else 0
+    """Convert raw ADC value to pressure (example 0-10 bar)."""
+    return round((raw / 32767) * 10, 2)
 
-# ---------------- MAIN LOOP ----------------
+# -----------------------------
+# MAIN LOOP
+# -----------------------------
 print("\nSystem started... Logging data every 10 seconds\n", flush=True)
 
 while True:
     raw = read_raw_values()
+    if raw is None:
+        print("❌ ADS DATA INVALID — skipping DB insert", flush=True)
+        time.sleep(10)
+        continue
+
     pressures = tuple(convert_to_pressure(r) for r in raw)
 
-    # Check last DB entry to avoid duplicates
+    # Optional: check last record to avoid duplicate entries
     cursor.execute("""
         SELECT bp_pressure, fp_pressure, cr_pressure, bc_pressure
         FROM brake_pressure_log
