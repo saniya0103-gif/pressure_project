@@ -9,10 +9,11 @@ import paho.mqtt.client as mqtt
 # ================= BASE PATH =================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-DB_PATH = os.path.join(BASE_DIR, "project.db")
+# Correct DB path inside the 'db' folder
+DB_PATH = os.path.join(BASE_DIR, "db", "project.db")
 CERT_DIR = os.path.join(BASE_DIR, "aws_iot")
 
-# Use the actual filenames from your aws_iot folder
+# Actual certificate filenames from your aws_iot folder
 ROOT_CA = os.path.join(CERT_DIR, "AmazonRootCA1.pem")
 CERT_FILE = os.path.join(CERT_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt")
 KEY_FILE = os.path.join(CERT_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key")
@@ -71,7 +72,12 @@ except Exception as e:
 client.loop_start()
 
 # ================= DATABASE =================
-conn = sqlite3.connect(DB_PATH)
+try:
+    conn = sqlite3.connect(DB_PATH)
+except sqlite3.OperationalError as e:
+    print("❌ Unable to open database:", e)
+    sys.exit(1)
+
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
