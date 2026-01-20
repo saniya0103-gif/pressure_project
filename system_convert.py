@@ -119,4 +119,4 @@ while True:
         flush=True
     )
 
-    time.sleep(20)
+    time.sleep(10)
