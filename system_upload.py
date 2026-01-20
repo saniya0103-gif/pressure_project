@@ -5,7 +5,7 @@ import os
 import ssl
 import paho.mqtt.client as mqtt
 
-# ===================== PATHS =====================
+# ===================== BASE PATH =====================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DB_PATH = os.path.join(BASE_DIR, "project.db")
@@ -22,15 +22,25 @@ PORT      = 8883
 CLIENT_ID = "Raspberry"
 TOPIC = "brake/pressure"
 
-# ===================== VERIFY FILES =====================
-for f in [DB_PATH, ROOT_CA, CERT_FILE, KEY_FILE]:
-    if not os.path.exists(f):
-        raise FileNotFoundError(f"❌ Missing file: {f}")
+# ===================== SAFE PATH CHECK (NO CRASH) =====================
+print("Checking DB & certificate paths...")
 
-print("✅ DB and certificate paths verified")
+if not os.path.exists(DB_PATH):
+    print("❌ Database not found:", DB_PATH)
+
+if not os.path.exists(ROOT_CA):
+    print("⚠ Root CA missing:", ROOT_CA)
+
+if not os.path.exists(CERT_FILE):
+    print("⚠ Device certificate missing:", CERT_FILE)
+
+if not os.path.exists(KEY_FILE):
+    print("⚠ Private key missing:", KEY_FILE)
+
+print("✅ Path check completed (no forced stop)")
 
 # ===================== MQTT SETUP =====================
-client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
+client = mqtt.Client(client_id=CLIENT_ID)
 
 client.tls_set(
     ca_certs=ROOT_CA,
@@ -41,12 +51,12 @@ client.tls_set(
 
 client.tls_insecure_set(False)
 
-# ===================== CALLBACKS =====================
+# ===================== CALLBACK =====================
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print("✅ Connected to AWS IoT Core")
     else:
-        print("❌ Connection failed with code", rc)
+        print("❌ AWS IoT connection failed, rc =", rc)
 
 client.on_connect = on_connect
 
@@ -59,7 +69,7 @@ conn = sqlite3.connect(DB_PATH)
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
-# ===================== UPLOAD LOOP =====================
+# ===================== MAIN LOOP =====================
 while True:
     cur.execute("""
         SELECT *
@@ -99,13 +109,13 @@ while True:
             conn.commit()
 
             print(
-                f"Uploaded and marked as done DB uploaded=1 | "
+                f"Uploaded and marked DB uploaded=1 | "
                 f"Timestamp: {row['created_at']}"
             )
             print("Data published to AWS IoT\n")
 
         else:
-            print("❌ Publish failed, will retry later")
+            print("❌ Publish failed, retry later")
             break
 
     time.sleep(2)
