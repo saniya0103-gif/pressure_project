@@ -61,7 +61,12 @@ def on_connect(client, userdata, flags, rc):
 client.on_connect = on_connect
 
 print("Connecting to AWS IoT Core...")
-client.connect(AWS_ENDPOINT, PORT)
+try:
+    client.connect(AWS_ENDPOINT, PORT)
+except Exception as e:
+    print("❌ MQTT Connection Error:", e)
+    sys.exit(1)
+
 client.loop_start()
 
 # ================= DATABASE =================
@@ -70,49 +75,63 @@ conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
 # ================= MAIN LOOP =================
-while True:
-    cur.execute("""
-        SELECT *
-        FROM brake_pressure_log
-        WHERE uploaded = 0
-        ORDER BY created_at ASC
-        LIMIT 5
-    """)
-    rows = cur.fetchall()
+try:
+    while True:
+        cur.execute("""
+            SELECT *
+            FROM brake_pressure_log
+            WHERE uploaded = 0
+            ORDER BY created_at ASC
+            LIMIT 5
+        """)
+        rows = cur.fetchall()
 
-    if not rows:
-        print("✅ No pending rows")
-        time.sleep(5)
-        continue
+        if not rows:
+            print("✅ No pending rows")
+            time.sleep(5)
+            continue
 
-    for row in rows:
-        payload = {
-            "created_at": row["created_at"],
-            "bp_pressure": row["bp_pressure"],
-            "fp_pressure": row["fp_pressure"],
-            "cr_pressure": row["cr_pressure"],
-            "bc_pressure": row["bc_pressure"]
-        }
+        for row in rows:
+            payload = {
+                "created_at": row["created_at"],
+                "bp_pressure": row["bp_pressure"],
+                "fp_pressure": row["fp_pressure"],
+                "cr_pressure": row["cr_pressure"],
+                "bc_pressure": row["bc_pressure"]
+            }
 
-        result = client.publish(TOPIC, json.dumps(payload), qos=1)
+            try:
+                result = client.publish(TOPIC, json.dumps(payload), qos=1)
 
-        if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            print("Sent to AWS IoT:", payload)
+                if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                    print("Sent to AWS IoT:", payload)
 
-            cur.execute(
-                "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
-                (row["id"],)
-            )
-            conn.commit()
+                    cur.execute(
+                        "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
+                        (row["id"],)
+                    )
+                    conn.commit()
 
-            print(
-                f"Uploaded and marked DB uploaded=1 | "
-                f"Timestamp: {row['created_at']}"
-            )
-            print("Data published to AWS IoT\n")
+                    print(
+                        f"Uploaded and marked DB uploaded=1 | "
+                        f"Timestamp: {row['created_at']}"
+                    )
+                    print("Data published to AWS IoT\n")
+                else:
+                    print("❌ Publish failed, retry later")
+                    break
 
-        else:
-            print("❌ Publish failed, retry later")
-            break
+            except Exception as e:
+                print("❌ Exception while publishing:", e)
+                break
 
-    time.sleep(2)
+        time.sleep(2)
+
+except KeyboardInterrupt:
+    print("Process stopped by user")
+
+finally:
+    conn.close()
+    client.loop_stop()
+    client.disconnect()
+    print("Database closed and MQTT disconnected")
