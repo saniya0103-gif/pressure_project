@@ -13,7 +13,7 @@ DB_PATH   = os.path.join(BASE_PATH, "db", "project.db")
 
 CERT_PATH = os.path.join(AWS_PATH, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt")
 KEY_PATH  = os.path.join(AWS_PATH, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key")
-CA_PATH   = os.path.join(AWS_PATH, "AmazonRootCA1.pem")  # Use CA1 or CA3 that matches your certificate
+CA_PATH   = os.path.join(AWS_PATH, "AmazonRootCA1.pem")  # Make sure this matches your certificate
 
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
@@ -38,7 +38,6 @@ def connect_mqtt():
         client.on_connect = on_connect
         client.on_publish = on_publish
 
-        # TLS setup
         client.tls_set(
             ca_certs=CA_PATH,
             certfile=CERT_PATH,
@@ -46,11 +45,9 @@ def connect_mqtt():
             tls_version=ssl.PROTOCOL_TLSv1_2
         )
 
-        print("Connecting to AWS IoT Core...")
         client.connect(ENDPOINT, PORT, keepalive=60)
         client.loop_start()
         return client
-
     except Exception as e:
         print("❌ MQTT connection failed:", e)
         return None
@@ -60,13 +57,13 @@ mqtt_client = None
 while mqtt_client is None:
     mqtt_client = connect_mqtt()
     if mqtt_client is None:
-        print("Retrying connection in 5 seconds...")
+        print("Retrying in 5 seconds...")
         time.sleep(5)
 
 # ---------------- DATABASE SETUP ----------------
 conn = sqlite3.connect(DB_PATH)
 conn.row_factory = sqlite3.Row
-cursor = conn.cursor()
+cur = conn.cursor()
 
 # ---------------- UPLOAD FUNCTION ----------------
 def upload_to_app(row):
@@ -79,7 +76,7 @@ def upload_to_app(row):
             "created_at": row["created_at"]
         }
         mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-        print("Sent to AWS IoT:", payload)
+        print(f"Sent to AWS IoT: {payload}")
         return True
     except Exception as e:
         print("Upload failed:", e)
@@ -87,25 +84,23 @@ def upload_to_app(row):
 
 # ---------------- MAIN LOOP ----------------
 while True:
-    cursor.execute("""
+    cur.execute("""
         SELECT * FROM brake_pressure_log
         WHERE uploaded = 0
         ORDER BY created_at ASC
         LIMIT 1
     """)
-    row = cursor.fetchone()
+    row = cur.fetchone()
 
     if row:
-        success = upload_to_app(row)
-        if success:
-            cursor.execute("""
-                UPDATE brake_pressure_log
-                SET uploaded = 1
-                WHERE id = ?
-            """, (row["id"],))
+        if upload_to_app(row):
+            cur.execute(
+                "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
+                (row['id'],)
+            )
             conn.commit()
-            print("✅ Uploaded and marked as done")
+            print(f"Row {row['id']} marked uploaded (0)")
     else:
-        print("No pending rows to upload.")
+        print("No data to upload")
 
-    time.sleep(5)
+    time.sleep(2)
