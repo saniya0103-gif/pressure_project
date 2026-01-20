@@ -1,20 +1,16 @@
-# -----------------------------
-# Base image
-# -----------------------------
-FROM python:3.11-bullseye
+# Use official slim Python 3.11 image
+FROM python:3.11-slim
 
 # -----------------------------
 # Install system dependencies
 # -----------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    i2c-tools \
-    build-essential \
-    python3-dev \
-    gcc \
-    swig \
-    libgpiod2 \
-    python3-pip \
-    git \
+        i2c-tools \
+        python3-dev \
+        build-essential \
+        gcc \
+        git \
+        python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------
@@ -28,9 +24,13 @@ WORKDIR /app
 RUN python3 -m pip install --upgrade pip
 
 # -----------------------------
-# Copy requirements and install
+# Copy requirements.txt first (cache optimization)
 # -----------------------------
 COPY requirements.txt /app/
+
+# -----------------------------
+# Install Python dependencies
+# -----------------------------
 RUN python3 -m pip install -r requirements.txt
 
 # -----------------------------
@@ -41,12 +41,13 @@ COPY . /app
 # -----------------------------
 # Blinka environment variables
 # -----------------------------
+# Force Blinka to use RPI.GPIO instead of lgpio
 ENV BLINKA_FORCEBOARD=RASPBERRY_PI_5
 ENV BLINKA_FORCECHIP=BCM2712
-ENV BLINKA_USE_LGPIO=1
+ENV BLINKA_USE_RPI_GPIO=1
 ENV PYTHONUNBUFFERED=1
 
 # -----------------------------
-# Run main script
+# Run the main script
 # -----------------------------
 CMD ["python3", "system_convert.py"]
