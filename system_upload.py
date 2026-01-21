@@ -99,7 +99,7 @@ try:
         for row in rows:
             payload = {
                 "ID": "Sensor1",
-                "created_at": row["created_at"],
+                "Timestamp": row["created_at"],
                 "bp_pressure": row["bp_pressure"],
                 "fp_pressure": row["fp_pressure"],
                 "cr_pressure": row["cr_pressure"],
