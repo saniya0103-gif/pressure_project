@@ -51,11 +51,17 @@ client.tls_set(
     tls_version=ssl.PROTOCOL_TLSv1_2
 )
 
+# ===== Connection Flag =====
+connected_flag = False
+
 def on_connect(client, userdata, flags, rc):
+    global connected_flag
     if rc == 0:
         print("✅ Connected to AWS IoT Core")
+        connected_flag = True
     else:
         print("❌ Connection failed, rc =", rc)
+        connected_flag = False
 
 client.on_connect = on_connect
 
@@ -67,6 +73,11 @@ except Exception as e:
     sys.exit(1)
 
 client.loop_start()
+
+# ===== Wait until connected =====
+while not connected_flag:
+    print("⏳ Waiting for MQTT connection...")
+    time.sleep(1)
 
 # ================= DATABASE =================
 try:
@@ -120,7 +131,7 @@ try:
                     print(f"Uploaded and marked ROW id = {row['id']} | Timestamp: {row['created_at']}")
                     print("Data published to AWS IoT\n")
                 else:
-                    print("❌ Publish failed, will retry later")
+                    print("❌ Publish failed, will retry later | rc =", result.rc)
                     break
 
             except Exception as e:
