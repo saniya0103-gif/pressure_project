@@ -103,13 +103,13 @@ try:
                     break
 
             payload = {
-                "ID": "Sensor1",
+                #"ID": "Sensor1",
                 "Timestamp": row["created_at"],
                 "bp_pressure": row["bp_pressure"],
                 "fp_pressure": row["fp_pressure"],
                 "cr_pressure": row["cr_pressure"],
                 "bc_pressure": row["bc_pressure"],
-                "sent_at": time.strftime("%Y-%m-%d %H:%M:%S")
+                #"sent_at": time.strftime("%Y-%m-%d %H:%M:%S")
             }
 
             print(
