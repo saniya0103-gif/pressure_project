@@ -8,7 +8,7 @@ import paho.mqtt.client as mqtt
 
 # ================= BASE PATH =================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "db", "project.db")  # Mounted db folder in Docker
+DB_PATH = os.path.join(BASE_DIR, "db", "project.db")
 CERT_DIR = os.path.join(BASE_DIR, "aws_iot")
 
 # ================= AWS IoT CERTIFICATES =================
@@ -25,15 +25,10 @@ PORT = 8883
 # ================= VALIDATION =================
 print("Checking DB & certificate paths...")
 
-missing = False
 for f in [ROOT_CA, CERT_FILE, KEY_FILE]:
     if not os.path.exists(f):
         print("❌ Missing:", f)
-        missing = True
-
-if missing:
-    print("\n❌ AWS IoT certificates are mandatory")
-    sys.exit(1)
+        sys.exit(1)
 
 if not os.path.exists(DB_PATH):
     print("❌ Database not found:", DB_PATH)
@@ -51,7 +46,6 @@ client.tls_set(
     tls_version=ssl.PROTOCOL_TLSv1_2
 )
 
-# ===== Connection Flag =====
 connected_flag = False
 
 def on_connect(client, userdata, flags, rc):
@@ -61,42 +55,34 @@ def on_connect(client, userdata, flags, rc):
         connected_flag = True
     else:
         print("❌ Connection failed, rc =", rc)
-        connected_flag = False
 
 client.on_connect = on_connect
 
-try:
-    print("Connecting to AWS IoT Core...")
-    client.connect(AWS_ENDPOINT, PORT)
-except Exception as e:
-    print("❌ MQTT Connection Error:", e)
-    sys.exit(1)
-
+client.connect(AWS_ENDPOINT, PORT)
 client.loop_start()
 
-# ===== Wait until connected =====
 while not connected_flag:
-    print("⏳ Waiting for MQTT connection...")
     time.sleep(1)
 
 # ================= DATABASE =================
-try:
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-except sqlite3.OperationalError as e:
-    print("❌ Unable to open database:", e)
-    sys.exit(1)
-
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
+
+# ✅ VERY IMPORTANT: Enable WAL (fixes race condition)
+cur.execute("PRAGMA journal_mode=WAL;")
+cur.execute("PRAGMA synchronous=NORMAL;")
+conn.commit()
 
 # ================= MAIN LOOP =================
 try:
     while True:
-        # Fetch pending rows, oldest first
+        # 🔒 Read only fully-written rows (2s safety window)
         cur.execute("""
             SELECT *
             FROM brake_pressure_log
             WHERE uploaded = 0
+              AND created_at <= datetime('now', '-2 seconds')
             ORDER BY created_at ASC
             LIMIT 5
         """)
@@ -114,34 +100,37 @@ try:
                 "bp_pressure": row["bp_pressure"],
                 "fp_pressure": row["fp_pressure"],
                 "cr_pressure": row["cr_pressure"],
-                "bc_pressure": row["bc_pressure"]
+                "bc_pressure": row["bc_pressure"],
+                "sent_at": time.strftime("%Y-%m-%d %H:%M:%S")
             }
 
-            try:
-                result = client.publish(TOPIC, json.dumps(payload), qos=1)
+            print(
+                f"[UPLOAD] id={row['id']} "
+                f"BP={row['bp_pressure']} FP={row['fp_pressure']} "
+                f"CR={row['cr_pressure']} BC={row['bc_pressure']} "
+                f"time={row['created_at']}"
+            )
 
-                if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                    print(f"Sent to AWS IoT: {payload}")
-                    # ✅ Correctly mark as uploaded
-                    cur.execute(
-                        "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
-                        (row["id"],)
-                    )
-                    conn.commit()
-                    print(f"Uploaded and marked ROW id = {row['id']} | Timestamp: {row['created_at']}")
-                    print("Data published to AWS IoT\n")
-                else:
-                    print("❌ Publish failed, will retry later | rc =", result.rc)
-                    break
+            result = client.publish(TOPIC, json.dumps(payload), qos=1)
 
-            except Exception as e:
-                print("❌ Exception while publishing:", e)
+            if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                # ✅ Atomic update (prevents double upload)
+                cur.execute("""
+                    UPDATE brake_pressure_log
+                    SET uploaded = 1
+                    WHERE id = ? AND uploaded = 0
+                """, (row["id"],))
+                conn.commit()
+
+                print(f"✅ Uploaded & marked id={row['id']}\n")
+            else:
+                print("❌ Publish failed, retry later")
                 break
 
         time.sleep(2)
 
 except KeyboardInterrupt:
-    print("Process stopped by user")
+    print("Stopped by user")
 
 finally:
     conn.close()
