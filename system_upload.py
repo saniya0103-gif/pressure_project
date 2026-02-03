@@ -25,10 +25,10 @@ PORT = 8883
 # ================= VERIFY FILES =================
 for f in [ROOT_CA, CERT_FILE, KEY_FILE, DB_PATH]:
     if not os.path.exists(f):
-        print("❌ Missing:", f)
+        print("Missing:", f)
         sys.exit(1)
 
-print("✅ All files verified")
+print("All files verified")
 
 # ================= MQTT SETUP =================
 client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
@@ -40,22 +40,28 @@ client.tls_set(
 )
 
 connected = False
+published_flag = False
 
 def on_connect(client, userdata, flags, rc):
     global connected
     if rc == 0:
         connected = True
-        print("✅ Connected to AWS IoT Core")
+        print("Connected to AWS IoT Core")
     else:
-        print("MQTT connect failed rc =", rc)
+        print(" MQTT connect failed rc =", rc)
 
 def on_disconnect(client, userdata, rc):
     global connected
     connected = False
     print("MQTT disconnected rc =", rc)
 
+def on_publish(client, userdata, mid):
+    global published_flag
+    published_flag = True
+
 client.on_connect = on_connect
 client.on_disconnect = on_disconnect
+client.on_publish = on_publish
 
 # ================= CONNECT =================
 try:
@@ -65,7 +71,6 @@ except Exception as e:
     sys.exit(1)
 
 client.loop_start()
-
 while not connected:
     print("⏳ Waiting for MQTT connection...")
     time.sleep(1)
@@ -74,8 +79,6 @@ while not connected:
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
-
-# Recommended for Docker + SQLite
 cur.execute("PRAGMA journal_mode=WAL;")
 cur.execute("PRAGMA synchronous=NORMAL;")
 conn.commit()
@@ -98,9 +101,8 @@ try:
             continue
 
         for row in rows:
-            # Ensure MQTT is connected
             if not client.is_connected():
-                print("MQTT not connected, trying to reconnect...")
+                print("MQTT not connected, reconnecting...")
                 try:
                     client.reconnect()
                     time.sleep(2)
@@ -115,21 +117,24 @@ try:
                 "cr_pressure": row["cr_pressure"],
                 "bc_pressure": row["bc_pressure"]
             }
-
             payload_str = json.dumps(payload)
 
-            # Print summary + exact JSON sent
             print(f"[UPLOAD] id={row['id']} BP={row['bp_pressure']} FP={row['fp_pressure']} CR={row['cr_pressure']} BC={row['bc_pressure']}")
-            print(f"📡 Sending payload to AWS IoT: {payload_str}")
+            print(f"Sending payload to AWS IoT: {payload_str}")
 
+            published_flag = False
             try:
-                msg = client.publish(TOPIC, payload_str, qos=1)
-                msg.wait_for_publish(timeout=5)
+                msg_info = client.publish(TOPIC, payload_str, qos=1)
+                # Wait until on_publish callback sets published_flag
+                timeout = time.time() + 5  # 5 seconds timeout
+                while not published_flag:
+                    if time.time() > timeout:
+                        raise Exception("Publish timeout")
+                    time.sleep(0.1)
 
-                # If no exception, assume sent
                 print(f"Sent to AWS IoT: {payload_str}")
 
-                # Update SQLite DB
+                # Update DB
                 cur.execute("""
                     UPDATE brake_pressure_log
                     SET uploaded = 1
