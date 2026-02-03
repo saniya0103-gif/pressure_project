@@ -29,7 +29,7 @@ services:
   uploader_app:
     build: .
     container_name: pressure_uploader
-    command: python system_upload.py
+    command: python -u system_upload.py
 
     network_mode: host          
 
