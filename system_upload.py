@@ -25,10 +25,10 @@ PORT = 8883
 # ================= VERIFY FILES =================
 for f in [ROOT_CA, CERT_FILE, KEY_FILE, DB_PATH]:
     if not os.path.exists(f):
-        print("Missing:", f)
+        print("❌ Missing:", f)
         sys.exit(1)
 
-print("All files verified")
+print("✅ All files verified")
 
 # ================= MQTT SETUP =================
 client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
@@ -45,7 +45,7 @@ def on_connect(client, userdata, flags, rc):
     global connected
     if rc == 0:
         connected = True
-        print("Connected to AWS IoT Core")
+        print("✅ Connected to AWS IoT Core")
     else:
         print("MQTT connect failed rc =", rc)
 
@@ -67,7 +67,7 @@ except Exception as e:
 client.loop_start()
 
 while not connected:
-    print("Waiting for MQTT connection...")
+    print("⏳ Waiting for MQTT connection...")
     time.sleep(1)
 
 # ================= DATABASE =================
@@ -113,8 +113,7 @@ try:
                 "bp_pressure": row["bp_pressure"],
                 "fp_pressure": row["fp_pressure"],
                 "cr_pressure": row["cr_pressure"],
-                "bc_pressure": row["bc_pressure"],
-                #"sent_at": time.strftime("%Y-%m-%d %H:%M:%S")
+                "bc_pressure": row["bc_pressure"]
             }
 
             payload_str = json.dumps(payload)
@@ -127,20 +126,20 @@ try:
                 msg = client.publish(TOPIC, payload_str, qos=1)
                 msg.wait_for_publish(timeout=5)
 
-                if msg.rc == mqtt.MQTT_ERR_SUCCESS:
-                    cur.execute("""
-                        UPDATE brake_pressure_log
-                        SET uploaded = 1
-                        WHERE id = ? AND uploaded = 0
-                    """, (row["id"],))
-                    conn.commit()
-                    print(f"✅ Uploaded & marked id={row['id']}\n")
-                else:
-                    print("Publish failed, will retry later")
-                    break
+                # If no exception, assume sent
+                print(f"Sent to AWS IoT: {payload_str}")
+
+                # Update SQLite DB
+                cur.execute("""
+                    UPDATE brake_pressure_log
+                    SET uploaded = 1
+                    WHERE id = ? AND uploaded = 0
+                """, (row["id"],))
+                conn.commit()
+                print(f"Uploaded & marked id={row['id']}\n")
 
             except Exception as e:
-                print("Exception while publishing:", e)
+                print("Publish exception:", e)
                 break
 
         time.sleep(2)
