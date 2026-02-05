@@ -41,13 +41,7 @@ COPY . /app
 # -----------------------------
 # Blinka environment variables
 # -----------------------------
-# Force Blinka to use RPI.GPIO instead of lgpio
 ENV BLINKA_FORCEBOARD=RASPBERRY_PI_5
 ENV BLINKA_FORCECHIP=BCM2712
 ENV BLINKA_USE_RPI_GPIO=1
 ENV PYTHONUNBUFFERED=1
-
-# -----------------------------
-# Run the main script
-# -----------------------------
-CMD ["python3", "system_capture.py"]
