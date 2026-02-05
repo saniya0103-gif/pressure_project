@@ -6,9 +6,10 @@ import sqlite3
 sys.stdout.reconfigure(encoding='utf-8')
 
 # ---------------- CONFIG ----------------
-RAW_THRESHOLD = 1638
+RAW_THRESHOLD = 1638              # ~0.5 bar
 SENSOR_ID = "RPI_BP_01"
 DB_PATH = "pressure_data.db"
+READ_INTERVAL = 10                # seconds
 
 # ---------------- DATABASE ----------------
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -31,7 +32,8 @@ conn.commit()
 ADS_AVAILABLE = True
 
 try:
-    import board, busio
+    import board
+    import busio
     import adafruit_ads1x15.ads1115 as ADS
     from adafruit_ads1x15.analog_in import AnalogIn
 
@@ -47,7 +49,7 @@ try:
 except Exception:
     ADS_AVAILABLE = False
 
-# ---------------- READ SENSOR ----------------
+# ---------------- SENSOR READ ----------------
 def read_raw_values():
     if ADS_AVAILABLE:
         return (
@@ -59,21 +61,25 @@ def read_raw_values():
     return (0, 0, 0, 0)
 
 # ---------------- MAIN LOOP ----------------
-last_raw = None
+print("System started...\n", flush=True)
 
-print("System running...\n", flush=True)
+last_raw = None
 
 while True:
     current_raw = read_raw_values()
+    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
 
+    # ---- PRINT SENSOR VALUES ----
     print(
-        f"RAW VALUES | "
-        f"BP:{current_raw[0]} FP:{current_raw[1]} "
-        f"CR:{current_raw[2]} BC:{current_raw[3]} | "
-        f"{time.strftime('%Y-%m-%d %H:%M:%S')}",
+        "RAW SENSOR VALUES\n"
+        f"ID: {SENSOR_ID}\n"
+        f"BP: {current_raw[0]} | FP: {current_raw[1]} | "
+        f"CR: {current_raw[2]} | BC: {current_raw[3]}\n"
+        f"Time: {timestamp}",
         flush=True
     )
 
+    # ---- FIRST ENTRY ----
     if last_raw is None:
         cursor.execute("""
             INSERT INTO pressure_log
@@ -88,6 +94,7 @@ while True:
             abs(current_raw[i] - last_raw[i]) for i in range(4)
         ]
 
+        # ---- UPLOAD ONLY IF ANY SENSOR CROSSES THRESHOLD ----
         if any(diff >= RAW_THRESHOLD for diff in diffs):
             cursor.execute("""
                 INSERT INTO pressure_log
@@ -97,6 +104,7 @@ while True:
             conn.commit()
             last_raw = current_raw
         else:
-            print("⏭ No change ≥1638 raw → Skipped upload\n", flush=True)
+            print("⏭ No change raw value → Skipped upload", flush=True)
 
-    time.sleep(10)
+    print("---------------------------------------------\n", flush=True)
+    time.sleep(READ_INTERVAL)
