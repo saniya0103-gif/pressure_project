@@ -2,16 +2,14 @@ import time
 import sys
 import sqlite3
 
-# ---------------- ENCODING ----------------
 sys.stdout.reconfigure(encoding='utf-8')
 
-# ---------------- CONFIG ----------------
-RAW_THRESHOLD = 1638              # ~0.5 bar
+RAW_THRESHOLD = 1638
 SENSOR_ID = "RPI_BP_01"
 DB_PATH = "pressure_data.db"
-READ_INTERVAL = 10                # seconds
+READ_INTERVAL = 10
 
-# ---------------- DATABASE ----------------
+# DATABASE
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = conn.cursor()
 
@@ -28,12 +26,10 @@ CREATE TABLE IF NOT EXISTS pressure_log (
 """)
 conn.commit()
 
-# ---------------- ADS1115 ----------------
+# ADS1115 SETUP
 ADS_AVAILABLE = True
-
 try:
-    import board
-    import busio
+    import board, busio
     import adafruit_ads1x15.ads1115 as ADS
     from adafruit_ads1x15.analog_in import AnalogIn
 
@@ -41,70 +37,59 @@ try:
     ads = ADS.ADS1115(i2c)
     ads.gain = 1
 
-    bp_channel = AnalogIn(ads, 0)
-    fp_channel = AnalogIn(ads, 1)
-    cr_channel = AnalogIn(ads, 2)
-    bc_channel = AnalogIn(ads, 3)
+    bp = AnalogIn(ads, 0)
+    fp = AnalogIn(ads, 1)
+    cr = AnalogIn(ads, 2)
+    bc = AnalogIn(ads, 3)
 
 except Exception:
     ADS_AVAILABLE = False
 
-# ---------------- SENSOR READ ----------------
-def read_raw_values():
+def read_raw():
     if ADS_AVAILABLE:
-        return (
-            bp_channel.value,
-            fp_channel.value,
-            cr_channel.value,
-            bc_channel.value
-        )
+        return (bp.value, fp.value, cr.value, bc.value)
     return (0, 0, 0, 0)
 
 # ---------------- MAIN LOOP ----------------
 print("System started...\n", flush=True)
 
-last_raw = None
-
 while True:
-    current_raw = read_raw_values()
+    current = read_raw()
     timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
 
-    # ---- PRINT SENSOR VALUES ----
     print(
-        "RAW SENSOR VALUES\n"
-        f"ID: {SENSOR_ID}\n"
-        f"BP: {current_raw[0]} | FP: {current_raw[1]} | "
-        f"CR: {current_raw[2]} | BC: {current_raw[3]}\n"
-        f"Time: {timestamp}",
+        f"RAW VALUES | BP:{current[0]} FP:{current[1]} "
+        f"CR:{current[2]} BC:{current[3]} | {timestamp}",
         flush=True
     )
 
-    # ---- FIRST ENTRY ----
-    if last_raw is None:
+    # 🔹 Get last DB record
+    cursor.execute("""
+        SELECT bp_raw, fp_raw, cr_raw, bc_raw
+        FROM pressure_log
+        ORDER BY id DESC
+        LIMIT 1
+    """)
+    last = cursor.fetchone()
+
+    upload = False
+
+    if last is None:
+        upload = True
+    else:
+        diffs = [abs(current[i] - last[i]) for i in range(4)]
+        if any(d >= RAW_THRESHOLD for d in diffs):
+            upload = True
+
+    if upload:
         cursor.execute("""
             INSERT INTO pressure_log
             (sensor_id, bp_raw, fp_raw, cr_raw, bc_raw)
             VALUES (?, ?, ?, ?, ?)
-        """, (SENSOR_ID, *current_raw))
+        """, (SENSOR_ID, *current))
         conn.commit()
-        last_raw = current_raw
-
+        print("Inseting to database\n", flush=True)
     else:
-        diffs = [
-            abs(current_raw[i] - last_raw[i]) for i in range(4)
-        ]
+        print("⏭ No change ≥ threshold → Skipped upload\n", flush=True)
 
-        # ---- UPLOAD ONLY IF ANY SENSOR CROSSES THRESHOLD ----
-        if any(diff >= RAW_THRESHOLD for diff in diffs):
-            cursor.execute("""
-                INSERT INTO pressure_log
-                (sensor_id, bp_raw, fp_raw, cr_raw, bc_raw)
-                VALUES (?, ?, ?, ?, ?)
-            """, (SENSOR_ID, *current_raw))
-            conn.commit()
-            last_raw = current_raw
-        else:
-            print("⏭ No change raw value → Skipped upload", flush=True)
-
-    print("---------------------------------------------\n", flush=True)
     time.sleep(READ_INTERVAL)
