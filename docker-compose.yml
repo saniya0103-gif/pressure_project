@@ -1,25 +1,6 @@
 #version: "3.9"
 
 services:
-  capture_app:
-    build: .
-    container_name: pressure_capture
-    command: python -u system_capture.py
-    network_mode: host
-    devices:
-      - /dev/i2c-1:/dev/i2c-1  # gives access to ADS1115
-    volumes:
-      - ./db:/app/db
-      - ./aws_iot:/app/aws_iot:ro
-    environment:
-      - BLINKA_FORCEBOARD=RASPBERRY_PI_5
-      - BLINKA_FORCECHIP=BCM2712
-      - BLINKA_USE_LGPIO=1
-    working_dir: /app
-    restart: always
-    tty: true
-    stdin_open: true
-
   uploader_app:
     build: .
     container_name: pressure_uploader
