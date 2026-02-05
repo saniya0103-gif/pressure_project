@@ -6,44 +6,33 @@ import ssl
 import sys
 import paho.mqtt.client as mqtt
 
-# ================= BASE PATH =================
+# ---------------- BASE PATH ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DB_PATH = os.path.join(BASE_DIR, "db", "project.db")
 CERT_DIR = os.path.join(BASE_DIR, "aws_iot")
 
-# ================= AWS IoT CERTIFICATES =================
+# ---------------- AWS IoT CERTIFICATES ----------------
 ROOT_CA = os.path.join(CERT_DIR, "AmazonRootCA1.pem")
+CERT_FILE = os.path.join(CERT_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt")
+KEY_FILE = os.path.join(CERT_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key")
 
-CERT_FILE = os.path.join(
-    CERT_DIR,
-    "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"
-)
-
-KEY_FILE = os.path.join(
-    CERT_DIR,
-    "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key"
-)
-
-# ================= AWS IoT SETTINGS =================
+# ---------------- AWS IoT SETTINGS ----------------
 AWS_ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 CLIENT_ID = "Raspberry"
 TOPIC = "brake/pressure"
 PORT = 8883
 
-# ================= VERIFY FILES =================
-required_files = [ROOT_CA, CERT_FILE, KEY_FILE, DB_PATH]
-
-for f in required_files:
+# ---------------- VERIFY FILES ----------------
+for f in [ROOT_CA, CERT_FILE, KEY_FILE, DB_PATH]:
     if not os.path.isfile(f):
         print("Missing file:", f, flush=True)
         sys.exit(1)
 
 print("All files verified", flush=True)
 
-# ================= MQTT SETUP =================
+# ---------------- MQTT SETUP ----------------
 client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
-
 client.tls_set(
     ca_certs=ROOT_CA,
     certfile=CERT_FILE,
@@ -75,7 +64,7 @@ client.on_connect = on_connect
 client.on_disconnect = on_disconnect
 client.on_publish = on_publish
 
-# ================= CONNECT =================
+# ---------------- CONNECT ----------------
 try:
     client.connect(AWS_ENDPOINT, PORT, keepalive=60)
 except Exception as e:
@@ -88,17 +77,17 @@ while not connected:
     print("Waiting for MQTT connection...", flush=True)
     time.sleep(1)
 
-# ================= DATABASE =================
+#  DATABASE 
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
-# ================= MAIN LOOP =================
+#MAIN LOOP
 try:
     while True:
         cur.execute("""
             SELECT *
-            FROM brake_pressure_log
+            FROM pressure_log
             WHERE uploaded = 0
             ORDER BY created_at ASC
             LIMIT 5
@@ -140,7 +129,7 @@ try:
                 time.sleep(0.1)
 
             cur.execute(
-                "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
+                "UPDATE pressure_log SET uploaded = 1 WHERE id = ?",
                 (row["id"],)
             )
             conn.commit()
@@ -156,4 +145,4 @@ finally:
     conn.close()
     client.loop_stop()
     client.disconnect()
-    print("🔌 Database closed & MQTT disconnected", flush=True)
+    print("Database closed & MQTT disconnected", flush=True)

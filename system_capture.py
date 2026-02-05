@@ -1,6 +1,7 @@
 import time
 import sys
 import sqlite3
+import os
 
 # ---------------- ENCODING ----------------
 sys.stdout.reconfigure(encoding='utf-8')
@@ -8,8 +9,11 @@ sys.stdout.reconfigure(encoding='utf-8')
 # ---------------- CONFIG ----------------
 RAW_THRESHOLD = 1638                 # ~0.5 bar equivalent
 SENSOR_ID = "System_Sensor:01"
-DB_PATH = "pressure_data.db"
 READ_INTERVAL = 10                   # seconds
+
+# ---------------- DATABASE PATH ----------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "db", "project.db")
 
 # ---------------- DATABASE ----------------
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -23,12 +27,13 @@ CREATE TABLE IF NOT EXISTS pressure_log (
     fp_raw INTEGER,
     cr_raw INTEGER,
     bc_raw INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    uploaded INTEGER DEFAULT 0
 )
 """)
 conn.commit()
 
-# ---------------- ADS1115 ----------------
+# ---------------- ADS1115 SENSOR ----------------
 ADS_AVAILABLE = True
 
 try:
@@ -49,7 +54,7 @@ try:
 except Exception:
     ADS_AVAILABLE = False
 
-# ---------------- SENSOR READ ----------------
+# ---------------- SENSOR READ FUNCTION ----------------
 def read_raw_values():
     if ADS_AVAILABLE:
         return (
@@ -69,7 +74,6 @@ while True:
     current_raw = read_raw_values()
     timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
 
-    # ---- PRINT RAW VALUES ----
     print(
         f"RAW VALUES | ID:{SENSOR_ID} | "
         f"BP:{current_raw[0]} | FP:{current_raw[1]} | "
@@ -80,7 +84,6 @@ while True:
 
     upload = False
 
-    # ---- FIRST ENTRY ----
     if last_raw is None:
         upload = True
     else:
@@ -88,7 +91,6 @@ while True:
         if any(diff >= RAW_THRESHOLD for diff in diffs):
             upload = True
 
-    # ---- DATABASE INSERT ONLY IF CHANGE ----
     if upload:
         cursor.execute("""
             INSERT INTO pressure_log
