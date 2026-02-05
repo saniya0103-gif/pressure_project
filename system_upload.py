@@ -5,6 +5,7 @@ import os
 import ssl
 import sys
 import paho.mqtt.client as mqtt
+import traceback
 
 # ---------------- BASE PATH ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -64,77 +65,80 @@ client.on_disconnect = on_disconnect
 client.on_publish = on_publish
 
 # ---------------- CONNECT ----------------
-try:
-    client.connect(AWS_ENDPOINT, PORT, keepalive=60)
-except Exception as e:
-    print("MQTT connection error:", e, flush=True)
-    sys.exit(1)
-
-client.loop_start()
-
 while not connected:
-    print("Waiting for MQTT connection...", flush=True)
-    time.sleep(1)
-
-# ---------------- DATABASE ----------------
+    try:
+        client.connect(AWS_ENDPOINT, PORT, keepalive=60)
+        client.loop_start()
+        time.sleep(1)
+    except Exception as e:
+        print("MQTT connection error:", e, flush=True)
+        time.sleep(5)  # wait and retry
+        
+# ---------------- DATABASE SETUP ----------------
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
-# ---------------- MAIN LOOP ----------------
 try:
     while True:
-        cur.execute("""
-            SELECT *
-            FROM brake_pressure_log
-            WHERE uploaded = 0
-            ORDER BY created_at ASC
-            LIMIT 5
-        """)
-        rows = cur.fetchall()
+        try:
+            cur.execute("""
+                SELECT *
+                FROM brake_pressure_log
+                WHERE uploaded = 0
+                ORDER BY created_at ASC
+                LIMIT 5
+            """)
+            rows = cur.fetchall()
 
-        if not rows:
-            print("No pending rows", flush=True)
-            time.sleep(5)
-            continue
+            if not rows:
+                print("No pending rows", flush=True)
+                time.sleep(5)
+                continue
 
-        for row in rows:
-            payload = {
-                "timestamp": row["created_at"],
-                "bp_pressure": row["bp_pressure"],
-                "fp_pressure": row["fp_pressure"],
-                "cr_pressure": row["cr_pressure"],
-                "bc_pressure": row["bc_pressure"]
-            }
+            for row in rows:
+                payload = {
+                    "timestamp": row["created_at"],
+                    "bp_pressure": row["bp_pressure"],
+                    "fp_pressure": row["fp_pressure"],
+                    "cr_pressure": row["cr_pressure"],
+                    "bc_pressure": row["bc_pressure"]
+                }
 
-            payload_str = json.dumps(payload)
+                payload_str = json.dumps(payload)
 
-            print(
-                f"⬆️ Uploading | ID:{row['id']} | "
-                f"BP:{row['bp_pressure']} FP:{row['fp_pressure']} "
-                f"CR:{row['cr_pressure']} BC:{row['bc_pressure']} | "
-                f"time:{row['created_at']}",
-                flush=True
-            )
+                print(
+                    f"⬆️ Uploading | ID:{row['id']} | "
+                    f"BP:{row['bp_pressure']} FP:{row['fp_pressure']} "
+                    f"CR:{row['cr_pressure']} BC:{row['bc_pressure']} | "
+                    f"time:{row['created_at']}",
+                    flush=True
+                )
 
-            published_flag = False
-            client.publish(TOPIC, payload_str, qos=1)
+                published_flag = False
+                client.publish(TOPIC, payload_str, qos=1)
 
-            timeout = time.time() + 5
-            while not published_flag:
-                if time.time() > timeout:
-                    raise Exception("Publish timeout")
-                time.sleep(0.1)
+                timeout = time.time() + 5
+                while not published_flag:
+                    if time.time() > timeout:
+                        print(f"Publish timeout for ID:{row['id']}, retrying later", flush=True)
+                        break
+                    time.sleep(0.1)
 
-            cur.execute(
-                "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
-                (row["id"],)
-            )
-            conn.commit()
+                else:
+                    cur.execute(
+                        "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
+                        (row["id"],)
+                    )
+                    conn.commit()
+                    print(f"Uploaded & marked id={row['id']}\n", flush=True)
 
-            print(f"Uploaded & marked id={row['id']}\n", flush=True)
+            time.sleep(2)  # small sleep to reduce CPU usage
 
-        time.sleep(5)
+        except Exception:
+            print("Error during upload loop:", flush=True)
+            traceback.print_exc()
+            time.sleep(5)  # wait before retrying
 
 except KeyboardInterrupt:
     print("Stopped by user", flush=True)
