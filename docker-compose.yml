@@ -6,8 +6,6 @@ services:
     container_name: pressure_uploader
     command: python -u system_upload.py
     network_mode: host
-    depends_on:
-      - capture_app
     devices:
       - /dev/i2c-1:/dev/i2c-1
     volumes:
