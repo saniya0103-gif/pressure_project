@@ -9,7 +9,7 @@ import paho.mqtt.client as mqtt
 # ================= BASE PATH =================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-DB_PATH = os.path.join(BASE_DIR, "project.db")
+DB_PATH = os.path.join(BASE_DIR, "db", "project.db")
 CERT_DIR = os.path.join(BASE_DIR, "aws_iot")
 
 # ================= AWS IoT CERTIFICATES =================
