@@ -50,4 +50,4 @@ ENV PYTHONUNBUFFERED=1
 # -----------------------------
 # Run the main script
 # -----------------------------
-CMD ["python3", "system_convert.py"]
+CMD ["python3", "system_capture.py"]
