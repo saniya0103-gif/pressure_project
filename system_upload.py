@@ -13,22 +13,22 @@ CERT_DIR = os.path.join(BASE_DIR, "aws_iot")
 
 # ================= AWS IoT CERTIFICATES =================
 ROOT_CA = os.path.join(CERT_DIR, "AmazonRootCA1.pem")
-CERT_FILE = os.path.join(CERT_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt")
-KEY_FILE = os.path.join(CERT_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key")
+CERT_FILE = os.path.join(CERT_DIR, "device-certificate.pem.crt")
+KEY_FILE = os.path.join(CERT_DIR, "private.pem.key")
 
 # ================= AWS IoT SETTINGS =================
 AWS_ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
-CLIENT_ID = "Raspberry"
+CLIENT_ID = "Raspberry_Uploader"
 TOPIC = "brake/pressure"
 PORT = 8883
 
 # ================= VERIFY FILES =================
 for f in [ROOT_CA, CERT_FILE, KEY_FILE, DB_PATH]:
     if not os.path.exists(f):
-        print("Missing:", f)
+        print("Missing file:", f)
         sys.exit(1)
 
-print("All files verified")
+print("All files verified", flush=True)
 
 # ================= MQTT SETUP =================
 client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
@@ -46,14 +46,14 @@ def on_connect(client, userdata, flags, rc):
     global connected
     if rc == 0:
         connected = True
-        print("Connected to AWS IoT Core")
+        print("Connected to AWS IoT Core", flush=True)
     else:
-        print(" MQTT connect failed rc =", rc)
+        print("MQTT connect failed rc =", rc, flush=True)
 
 def on_disconnect(client, userdata, rc):
     global connected
     connected = False
-    print("MQTT disconnected rc =", rc)
+    print("⚠ MQTT disconnected rc =", rc, flush=True)
 
 def on_publish(client, userdata, mid):
     global published_flag
@@ -64,15 +64,11 @@ client.on_disconnect = on_disconnect
 client.on_publish = on_publish
 
 # ================= CONNECT =================
-try:
-    client.connect(AWS_ENDPOINT, PORT, keepalive=60)
-except Exception as e:
-    print("MQTT connection error:", e)
-    sys.exit(1)
-
+client.connect(AWS_ENDPOINT, PORT, keepalive=60)
 client.loop_start()
+
 while not connected:
-    print("⏳ Waiting for MQTT connection...")
+    print("Waiting for MQTT connection...", flush=True)
     time.sleep(1)
 
 # ================= DATABASE =================
@@ -96,64 +92,60 @@ try:
         rows = cur.fetchall()
 
         if not rows:
-            print("No pending rows")
+            print("No pending rows", flush=True)
             time.sleep(5)
             continue
 
         for row in rows:
             if not client.is_connected():
-                print("MQTT not connected, reconnecting...")
-                try:
-                    client.reconnect()
-                    time.sleep(2)
-                except Exception as e:
-                    print("Reconnect failed:", e)
-                    break
+                print("MQTT disconnected, reconnecting...", flush=True)
+                client.reconnect()
+                time.sleep(2)
 
             payload = {
-                "created_at": row["created_at"],
+                "sensor_id": row["sensor_id"],
+                "timestamp": row["created_at"],
                 "bp_pressure": row["bp_pressure"],
                 "fp_pressure": row["fp_pressure"],
                 "cr_pressure": row["cr_pressure"],
                 "bc_pressure": row["bc_pressure"]
             }
+
             payload_str = json.dumps(payload)
 
-            print(f"[UPLOAD] id={row['id']} BP={row['bp_pressure']} FP={row['fp_pressure']} CR={row['cr_pressure']} BC={row['bc_pressure']}")
-            print(f"Sending payload to AWS IoT: {payload_str}")
+            print(
+                f"RAW VALUES | ID:{row['sensor_id']} | "
+                f"BP:{row['bp_pressure']} | FP:{row['fp_pressure']} | "
+                f"CR:{row['cr_pressure']} | BC:{row['bc_pressure']} | "
+                f"timestamp : {row['created_at']} | Uploading",
+                flush=True
+            )
 
             published_flag = False
-            try:
-                msg_info = client.publish(TOPIC, payload_str, qos=1)
-                # Wait until on_publish callback sets published_flag
-                timeout = time.time() + 5  # 5 seconds timeout
-                while not published_flag:
-                    if time.time() > timeout:
-                        raise Exception("Publish timeout")
-                    time.sleep(0.1)
+            client.publish(TOPIC, payload_str, qos=1)
 
-                print(f"Sent to AWS IoT: {payload_str}")
+            timeout = time.time() + 5
+            while not published_flag:
+                if time.time() > timeout:
+                    raise Exception("Publish timeout")
+                time.sleep(0.1)
 
-                # Update DB
-                cur.execute("""
-                    UPDATE brake_pressure_log
-                    SET uploaded = 1
-                    WHERE id = ? AND uploaded = 0
-                """, (row["id"],))
-                conn.commit()
-                print(f"Uploaded & marked id={row['id']}\n")
+            cur.execute("""
+                UPDATE brake_pressure_log
+                SET uploaded = 1
+                WHERE id = ?
+            """, (row["id"],))
+            conn.commit()
 
-            except Exception as e:
-                print("Publish exception:", e)
-                break
+            print("Uploaded & marked\n", flush=True)
 
         time.sleep(2)
 
 except KeyboardInterrupt:
-    print("Stopped by user")
+    print("Stopped by user", flush=True)
 
 finally:
     conn.close()
     client.loop_stop()
     client.disconnect()
-    print("Database closed and MQTT disconnected")
+    print("Database closed & MQTT disconnected", flush=True)
