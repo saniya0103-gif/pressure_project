@@ -8,7 +8,6 @@ sys.stdout.reconfigure(encoding='utf-8')
 
 # ---------------- CONFIG ----------------
 RAW_THRESHOLD = 1638                 # ~0.5 bar equivalent
-SENSOR_ID = "System_Sensor:01"
 READ_INTERVAL = 10                   # seconds
 
 # ---------------- DATABASE PATH ----------------
@@ -20,13 +19,12 @@ conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = conn.cursor()
 
 cursor.execute("""
-CREATE TABLE IF NOT EXISTS pressure_log (
+CREATE TABLE IF NOT EXISTS brake_pressure_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sensor_id TEXT,
-    bp_raw INTEGER,
-    fp_raw INTEGER,
-    cr_raw INTEGER,
-    bc_raw INTEGER,
+    bp_pressure REAL,
+    fp_pressure REAL,
+    cr_pressure REAL,
+    bc_pressure REAL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     uploaded INTEGER DEFAULT 0
 )
@@ -75,8 +73,8 @@ while True:
     timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
 
     print(
-        f"RAW VALUES | ID:{SENSOR_ID} | "
-        f"BP:{current_raw[0]} | FP:{current_raw[1]} | "
+        f"RAW VALUES | "
+        f"BP:{current_raw[0]} | FP:{current_raw[1]} "
         f"CR:{current_raw[2]} | BC:{current_raw[3]} | "
         f"timestamp : {timestamp}",
         flush=True
@@ -93,14 +91,15 @@ while True:
 
     if upload:
         cursor.execute("""
-            INSERT INTO pressure_log
-            (sensor_id, bp_raw, fp_raw, cr_raw, bc_raw)
-            VALUES (?, ?, ?, ?, ?)
-        """, (SENSOR_ID, *current_raw))
+            INSERT INTO brake_pressure_log
+            (bp_pressure, fp_pressure, cr_pressure, bc_pressure)
+            VALUES (?, ?, ?, ?)
+        """, (*current_raw,))
         conn.commit()
         last_raw = current_raw
+        print(f"✅ Data inserted into DB at {timestamp}", flush=True)
     else:
-        print("⏭ No change ≥ threshold → Skipped upload", flush=True)
+        print("⏭ No significant change → Skipped insert", flush=True)
 
     print("---------------------------------------------\n", flush=True)
     time.sleep(READ_INTERVAL)

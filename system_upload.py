@@ -8,7 +8,6 @@ import paho.mqtt.client as mqtt
 
 # ---------------- BASE PATH ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 DB_PATH = os.path.join(BASE_DIR, "db", "project.db")
 CERT_DIR = os.path.join(BASE_DIR, "aws_iot")
 
@@ -77,17 +76,17 @@ while not connected:
     print("Waiting for MQTT connection...", flush=True)
     time.sleep(1)
 
-#  DATABASE 
+# ---------------- DATABASE ----------------
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
-#MAIN LOOP
+# ---------------- MAIN LOOP ----------------
 try:
     while True:
         cur.execute("""
             SELECT *
-            FROM pressure_log
+            FROM brake_pressure_log
             WHERE uploaded = 0
             ORDER BY created_at ASC
             LIMIT 5
@@ -101,20 +100,19 @@ try:
 
         for row in rows:
             payload = {
-                "sensor_id": row["sensor_id"],
                 "timestamp": row["created_at"],
-                "bp_raw": row["bp_raw"],
-                "fp_raw": row["fp_raw"],
-                "cr_raw": row["cr_raw"],
-                "bc_raw": row["bc_raw"]
+                "bp_pressure": row["bp_pressure"],
+                "fp_pressure": row["fp_pressure"],
+                "cr_pressure": row["cr_pressure"],
+                "bc_pressure": row["bc_pressure"]
             }
 
             payload_str = json.dumps(payload)
 
             print(
-                f"⬆️ Uploading | ID:{row['sensor_id']} | "
-                f"BP:{row['bp_raw']} FP:{row['fp_raw']} "
-                f"CR:{row['cr_raw']} BC:{row['bc_raw']} | "
+                f"⬆️ Uploading | ID:{row['id']} | "
+                f"BP:{row['bp_pressure']} FP:{row['fp_pressure']} "
+                f"CR:{row['cr_pressure']} BC:{row['bc_pressure']} | "
                 f"time:{row['created_at']}",
                 flush=True
             )
@@ -129,7 +127,7 @@ try:
                 time.sleep(0.1)
 
             cur.execute(
-                "UPDATE pressure_log SET uploaded = 1 WHERE id = ?",
+                "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
                 (row["id"],)
             )
             conn.commit()
