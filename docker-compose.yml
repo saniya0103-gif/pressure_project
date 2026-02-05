@@ -36,3 +36,8 @@ services:
     restart: always
     tty: true
     stdin_open: true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M

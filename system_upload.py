@@ -7,7 +7,7 @@ import sys
 import paho.mqtt.client as mqtt
 
 # ---------------- BASE PATH ----------------
-BASE_DIR = "/app"  # this is the container working dir
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "db", "project.db")
 CERT_DIR = os.path.join(BASE_DIR, "aws_iot")
 
@@ -134,7 +134,7 @@ try:
 
             print(f"Uploaded & marked id={row['id']}\n", flush=True)
 
-        time.sleep(2)
+        time.sleep(5)
 
 except KeyboardInterrupt:
     print("Stopped by user", flush=True)
