@@ -59,11 +59,11 @@ def on_disconnect(client, userdata, rc):
     global connected_flag
     connected_flag = False
     if rc != 0:
-        print("Disconnected unexpectedly. Will reconnect automatically...", flush=True)
+        print("⚠️ Disconnected unexpectedly. Will reconnect automatically...", flush=True)
 
 # ---------------- MQTT CONNECT ----------------
 def start_mqtt():
-    client = Client(client_id=CLIENT_ID, protocol=MQTTv311)
+    client = Client(client_id=CLIENT_ID, protocol=MQTTv311)  # stable version
     client.tls_set(
         ca_certs=CA_PATH,
         certfile=CERT_PATH,
@@ -73,13 +73,12 @@ def start_mqtt():
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
 
-    # Retry until connected
     while True:
         try:
             client.connect(ENDPOINT, PORT, keepalive=60)
             break
         except Exception as e:
-            print(f"❌ MQTT connect error: {e}", flush=True)
+            print(f"MQTT connect error: {e}", flush=True)
             time.sleep(5)
 
     return client
@@ -103,9 +102,9 @@ def upload_to_aws(row, retries=5):
             continue
 
         result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-        mqtt_client.loop(0.1)  # process network events
+        mqtt_client.loop(0.1)
 
-        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+        if result.rc == Client.MQTT_ERR_SUCCESS:  # fixed reference
             print(
                 f"➡️ Uploaded | id={row['id']} | "
                 f"BP={row['bp_pressure']} | FP={row['fp_pressure']} | "
@@ -120,8 +119,8 @@ def upload_to_aws(row, retries=5):
 
     return False
 
-# ---------------- DATABASE UPLOAD LOOP ----------------
-BATCH_SIZE = 10
+# ---------------- DATABASE UPLOAD LOOP WITH BATCH FETCH ----------------
+BATCH_SIZE = 5  # reduced to avoid Docker memory issue (code 137)
 
 def upload_loop():
     try:
@@ -146,9 +145,9 @@ def upload_loop():
                         (row["id"],)
                     )
                     conn.commit()
-                    print(f"✅ Marked uploaded | id={row['id']}", flush=True)
+                    print(f"Marked uploaded | id={row['id']}", flush=True)
                 else:
-                    print(f"❌ Could not upload id={row['id']}. Will retry later.", flush=True)
+                    print(f"Could not upload id={row['id']}. Will retry later.", flush=True)
 
     except KeyboardInterrupt:
         pass
@@ -163,7 +162,7 @@ thread.start()
 try:
     mqtt_client.loop_forever(retry_first_connection=True)
 except KeyboardInterrupt:
-    print("\nInterrupted by user. Exiting...")
+    print("\n Interrupted by user. Exiting...")
 finally:
     if mqtt_client:
         mqtt_client.disconnect()
