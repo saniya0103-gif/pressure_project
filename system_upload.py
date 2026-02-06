@@ -52,7 +52,7 @@ def on_disconnect(client, userdata, rc):
     global connected_flag
     connected_flag = False
     if rc != 0:
-        print("⚠️ Unexpected MQTT disconnection. Trying to reconnect...", flush=True)
+        print("⚠️ Unexpected MQTT disconnection. Will reconnect automatically...", flush=True)
 
 # ---------------- MQTT CONNECT ----------------
 def connect_mqtt():
@@ -71,7 +71,7 @@ def connect_mqtt():
     while True:
         try:
             client.connect(ENDPOINT, PORT, keepalive=60)
-            client.loop_start()  # run network loop in background
+            client.loop_start()  # start network loop in background
             break
         except Exception as e:
             print(f"❌ MQTT connect error: {e}", flush=True)
@@ -110,6 +110,7 @@ def upload_to_aws(row, retries=5):
 
         result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
         mqtt_client.loop()  # process network events
+
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
             print(
                 f"➡️ Uploaded | id={row['id']} | "
@@ -120,6 +121,8 @@ def upload_to_aws(row, retries=5):
             )
             gc.collect()
             return True
+
+        # small delay before retry
         time.sleep(1)
 
     return False
