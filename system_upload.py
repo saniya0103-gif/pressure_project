@@ -123,7 +123,7 @@ while True:
 
     if not rows:
         print("⏳ No pending rows. Waiting...")
-        time.sleep(5)
+        time.sleep(30)
         continue
 
     for row in rows:
