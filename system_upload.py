@@ -16,21 +16,22 @@ AWS_PATH = os.path.join(BASE_DIR, "raspi")       # Certificates folder
 DB_PATH  = os.path.join(BASE_DIR, "db", "project.db")  # Database file
 
 # ---------------- AUTO-DETECT CERTIFICATES ----------------
-CA_PATHS = glob.glob(os.path.join(AWS_PATH, "AmazonRootCA*.pem"))
-if not CA_PATHS:
-    raise FileNotFoundError("CA certificate not found in raspi folder")
-CA_PATH = CA_PATHS[0]
+# Use AmazonRootCA1.pem for AWS IoT TLS verification
+CA_PATH = os.path.join(AWS_PATH, "AmazonRootCA1.pem")
+if not os.path.exists(CA_PATH):
+    raise FileNotFoundError("AmazonRootCA1.pem not found in raspi folder")
 
+# Auto-detect device certificate and private key
 CERTS = glob.glob(os.path.join(AWS_PATH, "*-certificate.pem.crt"))
 KEYS = glob.glob(os.path.join(AWS_PATH, "*-private.pem.key"))
 
 if not CERTS or not KEYS:
-    raise FileNotFoundError("Certificate or Private Key not found in raspi folder")
+    raise FileNotFoundError("Device certificate or private key not found in raspi folder")
 
 CERT_PATH = CERTS[0]
-KEY_PATH = KEYS[0]
+KEY_PATH  = KEYS[0]
 
-# Verify database file exists
+# Verify database exists
 if not os.path.exists(DB_PATH):
     raise FileNotFoundError(f"Database not found: {DB_PATH}")
 
@@ -70,25 +71,33 @@ def on_disconnect(client, userdata, rc):
 def start_mqtt():
     client = Client(
         client_id=CLIENT_ID,
-        protocol=MQTTv311,  # ✅ Fixed
-        callback_api_version=CallbackAPIVersion.VERSION1  # ✅ Fixed
+        protocol=MQTTv311,
+        callback_api_version=CallbackAPIVersion.VERSION1
     )
+
+    # ✅ TLS setup with proper CA for AWS IoT Core
     client.tls_set(
-        ca_certs=CA_PATH,
+        ca_certs=CA_PATH,       # AmazonRootCA1.pem
         certfile=CERT_PATH,
         keyfile=KEY_PATH,
         tls_version=ssl.PROTOCOL_TLSv1_2
     )
+
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
 
-    # Non-blocking loop to reduce memory usage
+    # Non-blocking MQTT loop
     client.loop_start()
 
+    # Retry connect until successful
     while True:
         try:
             client.connect(ENDPOINT, PORT, keepalive=60)
             break
+        except ssl.SSLError as ssl_err:
+            print(f"❌ SSL error: {ssl_err}", flush=True)
+            print("🔹 Check your CA certificate (AmazonRootCA1.pem)", flush=True)
+            time.sleep(5)
         except Exception as e:
             print(f"❌ MQTT connect error: {e}", flush=True)
             time.sleep(5)
@@ -114,9 +123,9 @@ def upload_to_aws(row, retries=5):
             continue
 
         result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-        mqtt_client.loop(0.05)  # small network loop to reduce memory
+        mqtt_client.loop(0.05)  # process network events
 
-        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+        if result.rc == mqtt_client.MQTT_ERR_SUCCESS:
             print(
                 f"➡️ Uploaded | id={row['id']} | "
                 f"BP={row['bp_pressure']} | FP={row['fp_pressure']} | "
@@ -124,7 +133,7 @@ def upload_to_aws(row, retries=5):
                 f"time={row['created_at']}",
                 flush=True
             )
-            gc.collect()  # free memory
+            gc.collect()
             return True
 
         time.sleep(0.5)
@@ -132,7 +141,7 @@ def upload_to_aws(row, retries=5):
     return False
 
 # ---------------- DATABASE UPLOAD LOOP WITH BATCH FETCH ----------------
-BATCH_SIZE = 5  # Smaller batch to reduce memory usage
+BATCH_SIZE = 5  # smaller batch for memory efficiency
 
 def upload_loop():
     try:
@@ -175,8 +184,8 @@ try:
     while True:
         time.sleep(1)
 except KeyboardInterrupt:
-    print("\n🛑 Interrupted by user. Exiting...")
+    print("\n Interrupted by user. Exiting...")
 finally:
     if mqtt_client:
         mqtt_client.disconnect()
-    print("Cleanup done. Exiting program.")
+    print("✅ Cleanup done. Exiting program.")
