@@ -5,16 +5,14 @@ import ssl
 import os
 import gc
 import threading
-import socket  # Added for unique Client ID
-import paho.mqtt.client as mqtt
-from paho.mqtt.client import CallbackAPIVersion # FIX: Deprecation
+from paho.mqtt import client as mqtt_client  # Correct import
 
 # ---------------- BASE PATH ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------- PATHS ----------------
-AWS_PATH = os.path.join(BASE_DIR, "raspi")
-DB_PATH  = os.path.join(BASE_DIR, "db", "project.db")
+AWS_PATH = os.path.join(BASE_DIR, "raspi")       # Certificates folder
+DB_PATH  = os.path.join(BASE_DIR, "db", "project.db")  # Database file
 
 # ---------------- CERTIFICATES ----------------
 CA_PATH   = os.path.join(AWS_PATH, "AmazonRootCA1.pem")
@@ -31,12 +29,11 @@ print("✅ All certificate files and database found", flush=True)
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 PORT      = 8883
-# FIX: Unique Client ID prevents "Disconnected unexpectedly"
-CLIENT_ID = f"Raspberry_pi_{socket.gethostname()}" 
+CLIENT_ID = "Raspberry_pi"
 TOPIC     = "brake/pressure"
 
 # ---------------- DATABASE CONNECTION ----------------
-conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=20)
+conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=10)
 conn.row_factory = sqlite3.Row
 cursor = conn.cursor()
 
@@ -53,16 +50,15 @@ def on_connect(client, userdata, flags, rc, properties=None):
         connected_flag = False
         print(f"❌ MQTT connect failed: {rc}", flush=True)
 
-def on_disconnect(client, userdata, rc, properties=None):
+def on_disconnect(client, userdata, rc):
     global connected_flag
     connected_flag = False
     if rc != 0:
-        print("⚠️ Disconnected unexpectedly. Reconnecting...", flush=True)
+        print("⚠️ Disconnected unexpectedly. Will reconnect automatically...", flush=True)
 
 # ---------------- MQTT CONNECT ----------------
 def start_mqtt():
-    # FIX: Added CallbackAPIVersion.VERSION1
-    client = mqtt.Client(CallbackAPIVersion.VERSION1, client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
+    client = mqtt_client.Client(client_id=CLIENT_ID, protocol=mqtt_client.MQTTv311)
     client.tls_set(
         ca_certs=CA_PATH,
         certfile=CERT_PATH,
@@ -75,17 +71,17 @@ def start_mqtt():
     while True:
         try:
             client.connect(ENDPOINT, PORT, keepalive=60)
-            client.loop_start() # FIX: Use loop_start for background threading
             break
         except Exception as e:
             print(f"❌ MQTT connect error: {e}", flush=True)
             time.sleep(5)
+
     return client
 
-mqtt_client = start_mqtt()
+mqtt_client_instance = start_mqtt()
 
 # ---------------- UPLOAD FUNCTION ----------------
-def upload_to_aws(row, retries=3):
+def upload_to_aws(row, retries=5):
     payload = {
         "id": row["id"],
         "timestamp": row["created_at"],
@@ -97,20 +93,30 @@ def upload_to_aws(row, retries=3):
 
     for _ in range(retries):
         if not connected_flag:
-            time.sleep(1)
+            time.sleep(0.5)
             continue
 
-        result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-        
-        # FIX: result.rc uses the mqtt module constant MQTT_ERR_SUCCESS
-        if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            print(f"➡️ Uploaded | id={row['id']}", flush=True)
+        result = mqtt_client_instance.publish(TOPIC, json.dumps(payload), qos=1)
+        mqtt_client_instance.loop(0.1)
+
+        # ✅ FIX: Use numeric 0 instead of MQTT_ERR_SUCCESS
+        if result.rc == 0:  # Success
+            print(
+                f"➡️ Uploaded | id={row['id']} | "
+                f"BP={row['bp_pressure']} | FP={row['fp_pressure']} | "
+                f"CR={row['cr_pressure']} | BC={row['bc_pressure']} | "
+                f"time={row['created_at']}",
+                flush=True
+            )
+            gc.collect()
             return True
+
         time.sleep(0.5)
+
     return False
 
 # ---------------- DATABASE UPLOAD LOOP ----------------
-BATCH_SIZE = 10 
+BATCH_SIZE = 3  # Small batch size avoids Docker memory kill
 
 def upload_loop():
     try:
@@ -124,36 +130,36 @@ def upload_loop():
             rows = cursor.fetchall()
 
             if not rows:
-                time.sleep(2)
+                time.sleep(1)
                 continue
 
             for row in rows:
-                if upload_to_aws(row):
-                    cursor.execute("UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?", (row["id"],))
+                success = upload_to_aws(row)
+                if success:
+                    cursor.execute(
+                        "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
+                        (row["id"],)
+                    )
                     conn.commit()
-                    gc.collect()
+                    print(f"✅ Marked uploaded | id={row['id']}", flush=True)
                 else:
-                    print(f"❌ Failed id={row['id']}", flush=True)
-            
-            time.sleep(0.1)
-    except Exception as e:
-        print(f"Critial Error in thread: {e}")
+                    print(f"❌ Could not upload id={row['id']}. Will retry later.", flush=True)
 
-# ---------------- MAIN ----------------
-if __name__ == "__main__":
-    thread = threading.Thread(target=upload_loop, daemon=True)
-    thread.start()
-
-    try:
-        while True:
-            # Check if thread is still alive
-            if not thread.is_alive():
-                break
-            time.sleep(1)
     except KeyboardInterrupt:
-        print("\n🛑 Interrupted by user. Exiting...")
+        pass
     finally:
-        mqtt_client.loop_stop()
-        mqtt_client.disconnect()
         conn.close()
-        print("✅ Cleanup done. Exiting program.")
+
+# ---------------- START UPLOAD THREAD ----------------
+thread = threading.Thread(target=upload_loop, daemon=True)
+thread.start()
+
+# ---------------- START MQTT LOOP ----------------
+try:
+    mqtt_client_instance.loop_forever(retry_first_connection=True)
+except KeyboardInterrupt:
+    print("\n🛑 Interrupted by user. Exiting...")
+finally:
+    if mqtt_client_instance:
+        mqtt_client_instance.disconnect()
+    print("✅ Cleanup done. Exiting program.")
