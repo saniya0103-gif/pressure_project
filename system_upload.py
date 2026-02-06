@@ -11,41 +11,40 @@ BASE_PATH = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspat
 AWS_PATH = os.path.join(BASE_PATH, "aws_iot")
 DB_PATH  = os.path.join(BASE_PATH, "db", "project.db")
 
-CA_PATH   = os.path.join(AWS_PATH, "AmazonRootCA1.pem")
-CERT_PATH = os.path.join(AWS_PATH, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt")
-KEY_PATH  = os.path.join(AWS_PATH, "c5811382f2c2cfb311d53c99b4b0fadf4889674d-private.pem.key")
+# ================= FIND CERT FILES =================
+def find_file(endswith):
+    for f in os.listdir(AWS_PATH):
+        if f.endswith(endswith):
+            return os.path.join(AWS_PATH, f)
+    return None
 
-# ================= CHECK FILES =================
-for name, path in {
-    "DB": DB_PATH,
-    "CA": CA_PATH,
-    "CERT": CERT_PATH,
-    "KEY": KEY_PATH
-}.items():
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"{name} not found: {path}")
+CA_PATH   = os.path.join(AWS_PATH, "AmazonRootCA1.pem")
+CERT_PATH = find_file("-certificate.pem.crt")
+KEY_PATH  = find_file("-private.pem.key")
+
+# ================= VALIDATION =================
+missing = []
+if not os.path.exists(CA_PATH): missing.append("AmazonRootCA1.pem")
+if not CERT_PATH: missing.append("Device Certificate")
+if not KEY_PATH: missing.append("Private Key")
+
+if missing:
+    raise FileNotFoundError(f"Missing files: {', '.join(missing)}")
 
 print("✅ All certificate files found")
 
 # ================= MQTT CONFIG =================
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 PORT      = 8883
-CLIENT_ID = "Raspberry_pi"          # MUST match IoT policy
-TOPIC     = "raspi/brake/pressure"   # MUST match IoT policy
-
-mqtt_connected = False
+CLIENT_ID = "Raspberry_pi"
+TOPIC     = "raspi/brake/pressure"
 
 # ================= CALLBACKS =================
 def on_connect(client, userdata, flags, rc):
-    global mqtt_connected
     if rc == 0:
-        mqtt_connected = True
         print("✅ Connected to AWS IoT Core")
     else:
-        print("❌ MQTT connect failed. RC =", rc)
-
-def on_disconnect(client, userdata, rc):
-    print("🔌 Disconnected (rc =", rc, ")")
+        print("❌ MQTT connection failed, RC =", rc)
 
 def on_publish(client, userdata, mid):
     print("📤 Message published")
@@ -55,7 +54,6 @@ def connect_mqtt():
     print("🔄 Connecting to AWS IoT...")
     client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
     client.on_connect = on_connect
-    client.on_disconnect = on_disconnect
     client.on_publish = on_publish
 
     client.tls_set(
@@ -67,16 +65,21 @@ def connect_mqtt():
 
     client.connect(ENDPOINT, PORT, keepalive=60)
     client.loop_start()
-
-    while not mqtt_connected:
-        time.sleep(0.5)
-
     return client
 
-mqtt_client = connect_mqtt()
+# ================= CONNECT =================
+mqtt_client = None
+while not mqtt_client:
+    try:
+        mqtt_client = connect_mqtt()
+        time.sleep(2)
+    except Exception as e:
+        print("⚠️ MQTT error:", e)
+        time.sleep(5)
 
 # ================= DATABASE =================
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+
 conn = sqlite3.connect(DB_PATH)
 conn.row_factory = sqlite3.Row
 cursor = conn.cursor()
@@ -93,7 +96,6 @@ def upload_to_aws(row):
     }
 
     result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-    result.wait_for_publish()
 
     if result.rc == mqtt.MQTT_ERR_SUCCESS:
         print(
@@ -105,13 +107,11 @@ def upload_to_aws(row):
             f"time={row['created_at']}"
         )
         return True
-
-    print("❌ Publish failed, rc =", result.rc)
-    return False
+    else:
+        print("❌ Publish failed:", result.rc)
+        return False
 
 # ================= MAIN LOOP =================
-print("🚀 Upload service started")
-
 while True:
     cursor.execute("""
         SELECT *
@@ -135,7 +135,6 @@ while True:
             conn.commit()
             print(f"✅ Marked uploaded | id={row['id']}")
         else:
-            print("⚠ Upload failed, retry later")
             break
 
         time.sleep(2)
