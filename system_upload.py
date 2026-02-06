@@ -5,7 +5,7 @@ import ssl
 import os
 import gc
 import threading
-from paho.mqtt.client import Client, MQTT_ERR_SUCCESS
+from paho.mqtt import client as mqtt_client  # Correct import
 
 # ---------------- BASE PATH ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -63,7 +63,7 @@ def on_disconnect(client, userdata, rc):
 
 # ---------------- MQTT CONNECT ----------------
 def start_mqtt():
-    client = Client(client_id=CLIENT_ID, protocol=Client.MQTTv311)
+    client = mqtt_client.Client(client_id=CLIENT_ID, protocol=mqtt_client.MQTTv311)
     client.tls_set(
         ca_certs=CA_PATH,
         certfile=CERT_PATH,
@@ -73,7 +73,7 @@ def start_mqtt():
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
 
-    # Keep trying to connect until successful
+    # Retry connect until successful
     while True:
         try:
             client.connect(ENDPOINT, PORT, keepalive=60)
@@ -103,9 +103,9 @@ def upload_to_aws(row, retries=5):
             continue
 
         result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-        mqtt_client.loop(0.1)  # process network events
+        mqtt_client.loop(0.1)
 
-        if result.rc == MQTT_ERR_SUCCESS:
+        if result.rc == mqtt_client.MQTT_ERR_SUCCESS:
             print(
                 f"➡️ Uploaded | id={row['id']} | "
                 f"BP={row['bp_pressure']} | FP={row['fp_pressure']} | "
@@ -121,7 +121,7 @@ def upload_to_aws(row, retries=5):
     return False
 
 # ---------------- DATABASE UPLOAD LOOP ----------------
-BATCH_SIZE = 2  # smaller batch to avoid memory issues
+BATCH_SIZE = 1  # Low memory safe for Raspberry Pi
 
 def upload_loop():
     try:
@@ -149,6 +149,7 @@ def upload_loop():
                     print(f"✅ Marked uploaded | id={row['id']}", flush=True)
                 else:
                     print(f"❌ Could not upload id={row['id']}. Will retry later.", flush=True)
+                time.sleep(0.1)  # Small delay to avoid memory spike
 
     except KeyboardInterrupt:
         pass
