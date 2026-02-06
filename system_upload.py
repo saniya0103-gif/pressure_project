@@ -5,19 +5,19 @@ import ssl
 import os
 import gc
 import threading
-import paho.mqtt.client as mqtt
+from paho.mqtt.client import Client, CallbackAPIVersion
 
 # ---------------- BASE PATH ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------- PATHS ----------------
-AWS_PATH = os.path.join(BASE_DIR, "raspi")       # Certificates folder
+AWS_PATH = os.path.join(BASE_DIR, "raspi")           # Certificates folder
 DB_PATH  = os.path.join(BASE_DIR, "db", "project.db")  # Database file
 
 # ---------------- CERTIFICATES ----------------
 CA_PATH   = os.path.join(AWS_PATH, "AmazonRootCA1.pem")
-CERT_PATH = os.path.join(AWS_PATH, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-certificate.pem.crt")
-KEY_PATH  = os.path.join(AWS_PATH, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-private.pem.key")
+CERT_PATH = os.path.join(AWS_PATH, "certificate.pem.crt")
+KEY_PATH  = os.path.join(AWS_PATH, "private.pem.key")
 
 # ---------------- VERIFY FILES ----------------
 for name, path in {
@@ -53,17 +53,21 @@ def on_connect(client, userdata, flags, rc, properties=None):
         print("✅ Connected to AWS IoT Core", flush=True)
     else:
         connected_flag = False
-        print(f"❌ MQTT connect failed: {rc}", flush=True)
+        print(f"MQTT connect failed: {rc}", flush=True)
 
 def on_disconnect(client, userdata, rc):
     global connected_flag
     connected_flag = False
     if rc != 0:
-        print("⚠️ Disconnected unexpectedly. Will reconnect automatically...", flush=True)
+        print("Disconnected unexpectedly. Will reconnect automatically...", flush=True)
 
 # ---------------- MQTT CONNECT ----------------
 def start_mqtt():
-    client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
+    client = Client(
+        client_id=CLIENT_ID,
+        protocol=Client.MQTTv311,
+        callback_api_version=CallbackAPIVersion.VERSION1  # ✅ Ensures old callback format
+    )
     client.tls_set(
         ca_certs=CA_PATH,
         certfile=CERT_PATH,
@@ -73,12 +77,15 @@ def start_mqtt():
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
 
+    # Non-blocking loop to reduce memory spikes
+    client.loop_start()
+
     while True:
         try:
             client.connect(ENDPOINT, PORT, keepalive=60)
             break
         except Exception as e:
-            print(f"❌ MQTT connect error: {e}", flush=True)
+            print(f"MQTT connect error: {e}", flush=True)
             time.sleep(5)
 
     return client
@@ -102,7 +109,7 @@ def upload_to_aws(row, retries=5):
             continue
 
         result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-        mqtt_client.loop(0.1)  # process network events
+        mqtt_client.loop(0.05)  # small network loop to reduce memory
 
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
             print(
@@ -112,7 +119,7 @@ def upload_to_aws(row, retries=5):
                 f"time={row['created_at']}",
                 flush=True
             )
-            gc.collect()
+            gc.collect()  # free memory
             return True
 
         time.sleep(0.5)
@@ -120,7 +127,7 @@ def upload_to_aws(row, retries=5):
     return False
 
 # ---------------- DATABASE UPLOAD LOOP WITH BATCH FETCH ----------------
-BATCH_SIZE = 10  # Only fetch 10 rows at a time to reduce memory usage
+BATCH_SIZE = 5  # Smaller batch to reduce memory usage
 
 def upload_loop():
     try:
@@ -145,9 +152,9 @@ def upload_loop():
                         (row["id"],)
                     )
                     conn.commit()
-                    print(f"✅ Marked uploaded | id={row['id']}", flush=True)
+                    print(f"Marked uploaded | id={row['id']}", flush=True)
                 else:
-                    print(f"❌ Could not upload id={row['id']}. Will retry later.", flush=True)
+                    print(f"Could not upload id={row['id']}. Will retry later.", flush=True)
 
     except KeyboardInterrupt:
         pass
@@ -158,12 +165,13 @@ def upload_loop():
 thread = threading.Thread(target=upload_loop, daemon=True)
 thread.start()
 
-# ---------------- START MQTT LOOP FOREVER ----------------
+# ---------------- KEEP SCRIPT RUNNING ----------------
 try:
-    mqtt_client.loop_forever(retry_first_connection=True)
+    while True:
+        time.sleep(1)
 except KeyboardInterrupt:
-    print("\n🛑 Interrupted by user. Exiting...")
+    print("\n Interrupted by user. Exiting...")
 finally:
     if mqtt_client:
         mqtt_client.disconnect()
-    print("✅ Cleanup done. Exiting program.")
+    print("Cleanup done. Exiting program.")
