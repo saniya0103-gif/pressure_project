@@ -71,7 +71,7 @@ def connect_mqtt():
     while True:
         try:
             client.connect(ENDPOINT, PORT, keepalive=60)
-            client.loop_start()  # start network loop in background
+            client.loop_start()
             break
         except Exception as e:
             print(f"❌ MQTT connect error: {e}", flush=True)
