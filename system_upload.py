@@ -99,7 +99,8 @@ def upload_to_aws(row, retries=5):
         result = mqtt_client_instance.publish(TOPIC, json.dumps(payload), qos=1)
         mqtt_client_instance.loop(0.1)
 
-        if result.rc == 0:  # SUCCESS
+        # ✅ FIX: Use numeric 0 instead of MQTT_ERR_SUCCESS
+        if result.rc == 0:  # Success
             print(
                 f"➡️ Uploaded | id={row['id']} | "
                 f"BP={row['bp_pressure']} | FP={row['fp_pressure']} | "
@@ -115,7 +116,7 @@ def upload_to_aws(row, retries=5):
     return False
 
 # ---------------- DATABASE UPLOAD LOOP ----------------
-BATCH_SIZE = 5  # smaller batch to prevent memory issues in Docker
+BATCH_SIZE = 3  # Small batch size avoids Docker memory kill
 
 def upload_loop():
     try:
