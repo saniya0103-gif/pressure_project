@@ -14,7 +14,7 @@ DB_PATH = os.path.join(BASE_DIR, "db", "project.db")
 # ---------------- AWS IoT CERTIFICATES ----------------
 CERT_DIR = os.path.expanduser("~/aws_certs")
 
-ROOT_CA = os.path.join(CERT_DIR, "AmazonRootCA3.pem")  # <- renamed
+ROOT_CA = os.path.join(CERT_DIR, "AmazonRootCA3.pem")
 CERT_FILE = os.path.join(CERT_DIR, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-certificate.pem.crt")
 KEY_FILE = os.path.join(CERT_DIR, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-private.pem.key")
 
