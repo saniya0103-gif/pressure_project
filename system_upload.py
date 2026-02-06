@@ -50,16 +50,16 @@ def on_connect(client, userdata, flags, rc, properties=None):
     global connected_flag
     if rc == 0:
         connected_flag = True
-        print("Connected to AWS IoT Core", flush=True)
+        print("✅ Connected to AWS IoT Core", flush=True)
     else:
         connected_flag = False
-        print(f"MQTT connect failed: {rc}", flush=True)
+        print(f"❌ MQTT connect failed: {rc}", flush=True)
 
 def on_disconnect(client, userdata, rc):
     global connected_flag
     connected_flag = False
     if rc != 0:
-        print("Disconnected unexpectedly. Will reconnect automatically...", flush=True)
+        print("⚠️ Disconnected unexpectedly. Will reconnect automatically...", flush=True)
 
 # ---------------- MQTT CONNECT ----------------
 def start_mqtt():
@@ -78,7 +78,7 @@ def start_mqtt():
             client.connect(ENDPOINT, PORT, keepalive=60)
             break
         except Exception as e:
-            print(f"MQTT connect error: {e}", flush=True)
+            print(f"❌ MQTT connect error: {e}", flush=True)
             time.sleep(5)
 
     return client
@@ -119,7 +119,9 @@ def upload_to_aws(row, retries=5):
 
     return False
 
-# ---------------- DATABASE UPLOAD LOOP ----------------
+# ---------------- DATABASE UPLOAD LOOP WITH BATCH FETCH ----------------
+BATCH_SIZE = 10  # Only fetch 10 rows at a time to reduce memory usage
+
 def upload_loop():
     try:
         while True:
@@ -127,11 +129,12 @@ def upload_loop():
                 SELECT * FROM brake_pressure_log
                 WHERE uploaded = 0
                 ORDER BY created_at ASC
-            """)
+                LIMIT ?
+            """, (BATCH_SIZE,))
             rows = cursor.fetchall()
 
             if not rows:
-                time.sleep(1)  # short sleep prevents keepalive timeout
+                time.sleep(1)
                 continue
 
             for row in rows:
@@ -142,9 +145,10 @@ def upload_loop():
                         (row["id"],)
                     )
                     conn.commit()
-                    print(f"Marked uploaded | id={row['id']}", flush=True)
+                    print(f"✅ Marked uploaded | id={row['id']}", flush=True)
                 else:
-                    print(f"Could not upload id={row['id']}. Will retry later.", flush=True)
+                    print(f"❌ Could not upload id={row['id']}. Will retry later.", flush=True)
+
     except KeyboardInterrupt:
         pass
     finally:
@@ -158,8 +162,8 @@ thread.start()
 try:
     mqtt_client.loop_forever(retry_first_connection=True)
 except KeyboardInterrupt:
-    print("\nInterrupted by user. Exiting...")
+    print("\n🛑 Interrupted by user. Exiting...")
 finally:
     if mqtt_client:
         mqtt_client.disconnect()
-    print("Cleanup done. Exiting program.")
+    print("✅ Cleanup done. Exiting program.")
