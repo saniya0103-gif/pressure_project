@@ -6,7 +6,7 @@ services:
     network_mode: host
     volumes:
       - ./db:/app/db
-      - ./aws_iot:/app/aws_iot:ro
+      - ./raspi:/app/raspi:ro
     environment:
       - BLINKA_FORCEBOARD=RASPBERRY_PI_5
       - BLINKA_FORCECHIP=BCM2712
