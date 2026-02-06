@@ -5,7 +5,7 @@ import ssl
 import os
 import gc
 import threading
-from paho.mqtt.client import Client
+from paho.mqtt.client import Client, MQTTv311
 
 # ---------------- BASE PATH ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -53,17 +53,17 @@ def on_connect(client, userdata, flags, rc, properties=None):
         print("✅ Connected to AWS IoT Core", flush=True)
     else:
         connected_flag = False
-        print(f"❌ MQTT connect failed: {rc}", flush=True)
+        print(f"MQTT connect failed: {rc}", flush=True)
 
 def on_disconnect(client, userdata, rc):
     global connected_flag
     connected_flag = False
     if rc != 0:
-        print("⚠️ Disconnected unexpectedly. Will reconnect automatically...", flush=True)
+        print("Disconnected unexpectedly. Will reconnect automatically...", flush=True)
 
 # ---------------- MQTT CONNECT ----------------
 def start_mqtt():
-    client = Client(client_id=CLIENT_ID, protocol=Client.MQTTv311)
+    client = Client(client_id=CLIENT_ID, protocol=MQTTv311)
     client.tls_set(
         ca_certs=CA_PATH,
         certfile=CERT_PATH,
@@ -72,11 +72,12 @@ def start_mqtt():
     )
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
-    client.loop_start()  # run network loop in background
 
-    while not connected_flag:
+    # Retry until connected
+    while True:
         try:
             client.connect(ENDPOINT, PORT, keepalive=60)
+            break
         except Exception as e:
             print(f"❌ MQTT connect error: {e}", flush=True)
             time.sleep(5)
@@ -102,7 +103,9 @@ def upload_to_aws(row, retries=5):
             continue
 
         result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-        if result.rc == 0:
+        mqtt_client.loop(0.1)  # process network events
+
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
             print(
                 f"➡️ Uploaded | id={row['id']} | "
                 f"BP={row['bp_pressure']} | FP={row['fp_pressure']} | "
@@ -117,8 +120,8 @@ def upload_to_aws(row, retries=5):
 
     return False
 
-# ---------------- DATABASE UPLOAD LOOP WITH BATCH FETCH ----------------
-BATCH_SIZE = 2  # small batch for Docker memory efficiency
+# ---------------- DATABASE UPLOAD LOOP ----------------
+BATCH_SIZE = 10
 
 def upload_loop():
     try:
@@ -132,7 +135,7 @@ def upload_loop():
             rows = cursor.fetchall()
 
             if not rows:
-                time.sleep(0.5)
+                time.sleep(1)
                 continue
 
             for row in rows:
@@ -156,13 +159,12 @@ def upload_loop():
 thread = threading.Thread(target=upload_loop, daemon=True)
 thread.start()
 
-# ---------------- KEEP SCRIPT RUNNING ----------------
+# ---------------- START MQTT LOOP FOREVER ----------------
 try:
-    while True:
-        time.sleep(1)  # lightweight main loop
+    mqtt_client.loop_forever(retry_first_connection=True)
 except KeyboardInterrupt:
-    print("\n🛑 Interrupted by user. Exiting...")
+    print("\nInterrupted by user. Exiting...")
 finally:
     if mqtt_client:
         mqtt_client.disconnect()
-    print("✅ Cleanup done. Exiting program.")
+    print("Cleanup done. Exiting program.")
