@@ -40,25 +40,26 @@ TOPIC     = "brake/pressure"
 connected_flag = False
 
 # ---------------- MQTT CALLBACKS ----------------
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, userdata, flags, rc, properties=None):
     global connected_flag
     if rc == 0:
-        print("✅ Connected to AWS IoT Core", flush=True)
         connected_flag = True
     else:
-        print("❌ MQTT connect failed:", rc, flush=True)
         connected_flag = False
+        print(f"❌ MQTT connect failed: {rc}", flush=True)
 
-def on_publish(client, userdata, mid):
-    print("📤 Message published", flush=True)
+def on_disconnect(client, userdata, rc):
+    global connected_flag
+    connected_flag = False
+    if rc != 0:
+        print("⚠️ Unexpected MQTT disconnection. Trying to reconnect...", flush=True)
 
 # ---------------- MQTT CONNECT ----------------
 def connect_mqtt():
-    print("🔄 Connecting to AWS IoT...", flush=True)
-
+    global connected_flag
     client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
     client.on_connect = on_connect
-    client.on_publish = on_publish
+    client.on_disconnect = on_disconnect
 
     client.tls_set(
         ca_certs=CA_PATH,
@@ -67,23 +68,21 @@ def connect_mqtt():
         tls_version=ssl.PROTOCOL_TLSv1_2
     )
 
-    # Connect once
     while True:
         try:
             client.connect(ENDPOINT, PORT, keepalive=60)
+            client.loop_start()  # run network loop in background
             break
         except Exception as e:
-            print("❌ MQTT connect error:", e, flush=True)
+            print(f"❌ MQTT connect error: {e}", flush=True)
             time.sleep(5)
-
-    # Start network loop in background
-    client.loop_start()
 
     # Wait until fully connected
     while not connected_flag:
         print("⏳ Waiting for MQTT connection...", flush=True)
         time.sleep(1)
 
+    print("✅ Connected to AWS IoT Core", flush=True)
     return client
 
 mqtt_client = connect_mqtt()
@@ -104,13 +103,13 @@ def upload_to_aws(row, retries=5):
         "bc": row["bc_pressure"]
     }
 
-    for attempt in range(retries):
-        if not connected_flag:
-            print("⚠️ MQTT not connected. Waiting...", flush=True)
-            time.sleep(2)
+    for _ in range(retries):
+        if not mqtt_client.is_connected():
+            time.sleep(1)
             continue
 
         result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
+        mqtt_client.loop()  # process network events
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
             print(
                 f"➡️ Uploaded | id={row['id']} | "
@@ -121,9 +120,7 @@ def upload_to_aws(row, retries=5):
             )
             gc.collect()
             return True
-        else:
-            print(f"❌ Publish failed attempt {attempt+1}/{retries}: {result.rc}", flush=True)
-            time.sleep(2)
+        time.sleep(1)
 
     return False
 
@@ -152,8 +149,7 @@ try:
                 conn.commit()
                 print(f"✅ Marked uploaded | id={row['id']}", flush=True)
             else:
-                print(f"❌ Skipped id={row['id']} due to publish error", flush=True)
-                time.sleep(5)
+                print(f"❌ Could not upload id={row['id']}. Will retry later.", flush=True)
 
 except KeyboardInterrupt:
     print("\n🛑 Interrupted by user. Exiting...")
