@@ -10,16 +10,17 @@ import traceback
 # ---------------- BASE PATH ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "db", "project.db")
-CERT_DIR = os.path.join(BASE_DIR, "aws_iot")
 
 # ---------------- AWS IoT CERTIFICATES ----------------
-ROOT_CA = os.path.join(CERT_DIR, "AmazonRootCA1.pem")
-CERT_FILE = os.path.join(CERT_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt")
-KEY_FILE = os.path.join(CERT_DIR, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key")
+CERT_DIR = os.path.expanduser("~/aws_certs")  # new folder
+
+ROOT_CA = os.path.join(CERT_DIR, "AmazonRootCA1 (1).pem")  # root CA
+CERT_FILE = os.path.join(CERT_DIR, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-certificate.pem.crt")  # device certificate
+KEY_FILE = os.path.join(CERT_DIR, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-private.pem.key")  # private key
 
 # ---------------- AWS IoT SETTINGS ----------------
 AWS_ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
-CLIENT_ID = "Raspberry"
+CLIENT_ID = "Raspberry_pi"  # updated client ID
 TOPIC = "brake/pressure"
 PORT = 8883
 
@@ -73,7 +74,7 @@ while not connected:
     except Exception as e:
         print("MQTT connection error:", e, flush=True)
         time.sleep(5)  # wait and retry
-        
+
 # ---------------- DATABASE SETUP ----------------
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 conn.row_factory = sqlite3.Row
