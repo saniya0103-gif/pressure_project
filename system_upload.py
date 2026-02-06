@@ -12,11 +12,11 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "db", "project.db")
 
 # ---------------- AWS IoT CERTIFICATES ----------------
-CERT_DIR = os.path.expanduser("~/aws_certs")  # new folder
+CERT_DIR = os.path.expanduser("~/aws_certs")
 
-ROOT_CA = os.path.join(CERT_DIR, "AmazonRootCA1 (1).pem")  # root CA
-CERT_FILE = os.path.join(CERT_DIR, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-certificate.pem.crt")  # device certificate
-KEY_FILE = os.path.join(CERT_DIR, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-private.pem.key")  # private key
+ROOT_CA = os.path.join(CERT_DIR, "AmazonRootCA3 (1).pem")
+CERT_FILE = os.path.join(CERT_DIR, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-certificate.pem.crt")
+KEY_FILE = os.path.join(CERT_DIR, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-private.pem.key")
 
 # ---------------- AWS IoT SETTINGS ----------------
 AWS_ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
