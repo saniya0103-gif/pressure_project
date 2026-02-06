@@ -20,12 +20,7 @@ CERT_PATH = os.path.join(AWS_PATH, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2f
 KEY_PATH  = os.path.join(AWS_PATH, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-private.pem.key")
 
 # ---------------- VERIFY FILES ----------------
-for name, path in {
-    "CA": CA_PATH,
-    "CERT": CERT_PATH,
-    "KEY": KEY_PATH,
-    "DB": DB_PATH
-}.items():
+for name, path in {"CA": CA_PATH, "CERT": CERT_PATH, "KEY": KEY_PATH, "DB": DB_PATH}.items():
     if not os.path.exists(path):
         raise FileNotFoundError(f"{name} not found: {path}")
 
@@ -73,7 +68,6 @@ def start_mqtt():
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
 
-    # Retry connect until successful
     while True:
         try:
             client.connect(ENDPOINT, PORT, keepalive=60)
@@ -84,7 +78,7 @@ def start_mqtt():
 
     return client
 
-mqtt_client = start_mqtt()
+mqtt_client_instance = start_mqtt()
 
 # ---------------- UPLOAD FUNCTION ----------------
 def upload_to_aws(row, retries=5):
@@ -102,10 +96,10 @@ def upload_to_aws(row, retries=5):
             time.sleep(0.5)
             continue
 
-        result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-        mqtt_client.loop(0.1)
+        result = mqtt_client_instance.publish(TOPIC, json.dumps(payload), qos=1)
+        mqtt_client_instance.loop(0.1)
 
-        if result.rc == mqtt_client.MQTT_ERR_SUCCESS:
+        if result.rc == 0:  # SUCCESS
             print(
                 f"➡️ Uploaded | id={row['id']} | "
                 f"BP={row['bp_pressure']} | FP={row['fp_pressure']} | "
@@ -121,7 +115,7 @@ def upload_to_aws(row, retries=5):
     return False
 
 # ---------------- DATABASE UPLOAD LOOP ----------------
-BATCH_SIZE = 1  # Low memory safe for Raspberry Pi
+BATCH_SIZE = 5  # smaller batch to prevent memory issues in Docker
 
 def upload_loop():
     try:
@@ -149,7 +143,6 @@ def upload_loop():
                     print(f"✅ Marked uploaded | id={row['id']}", flush=True)
                 else:
                     print(f"❌ Could not upload id={row['id']}. Will retry later.", flush=True)
-                time.sleep(0.1)  # Small delay to avoid memory spike
 
     except KeyboardInterrupt:
         pass
@@ -160,12 +153,12 @@ def upload_loop():
 thread = threading.Thread(target=upload_loop, daemon=True)
 thread.start()
 
-# ---------------- START MQTT LOOP FOREVER ----------------
+# ---------------- START MQTT LOOP ----------------
 try:
-    mqtt_client.loop_forever(retry_first_connection=True)
+    mqtt_client_instance.loop_forever(retry_first_connection=True)
 except KeyboardInterrupt:
     print("\n🛑 Interrupted by user. Exiting...")
 finally:
-    if mqtt_client:
-        mqtt_client.disconnect()
+    if mqtt_client_instance:
+        mqtt_client_instance.disconnect()
     print("✅ Cleanup done. Exiting program.")
