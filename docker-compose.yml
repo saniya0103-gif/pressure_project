@@ -10,7 +10,3 @@ services:
     environment:
       - BLINKA_FORCEBOARD=RASPBERRY_PI_5
       - BLINKA_FORCECHIP=BCM2712
-    deploy:
-      resources:
-        limits:
-          memory: 512M
