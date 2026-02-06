@@ -5,8 +5,7 @@ import ssl
 import os
 import gc
 import threading
-import glob
-from paho.mqtt.client import Client, MQTTv311
+from paho.mqtt.client import Client
 
 # ---------------- BASE PATH ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -15,24 +14,20 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 AWS_PATH = os.path.join(BASE_DIR, "raspi")       # Certificates folder
 DB_PATH  = os.path.join(BASE_DIR, "db", "project.db")  # Database file
 
-# ---------------- AUTO-DETECT CERTIFICATES ----------------
-CA_PATH = os.path.join(AWS_PATH, "AmazonRootCA1.pem")
-if not os.path.exists(CA_PATH):
-    raise FileNotFoundError("AmazonRootCA1.pem not found in raspi folder")
+# ---------------- CERTIFICATES ----------------
+CA_PATH   = os.path.join(AWS_PATH, "AmazonRootCA1.pem")
+CERT_PATH = os.path.join(AWS_PATH, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-certificate.pem.crt")
+KEY_PATH  = os.path.join(AWS_PATH, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-private.pem.key")
 
-# Auto-detect device certificate and private key
-CERTS = glob.glob(os.path.join(AWS_PATH, "*-certificate.pem.crt"))
-KEYS = glob.glob(os.path.join(AWS_PATH, "*-private.pem.key"))
-
-if not CERTS or not KEYS:
-    raise FileNotFoundError("Device certificate or private key not found in raspi folder")
-
-CERT_PATH = CERTS[0]
-KEY_PATH  = KEYS[0]
-
-# Verify database exists
-if not os.path.exists(DB_PATH):
-    raise FileNotFoundError(f"Database not found: {DB_PATH}")
+# ---------------- VERIFY FILES ----------------
+for name, path in {
+    "CA": CA_PATH,
+    "CERT": CERT_PATH,
+    "KEY": KEY_PATH,
+    "DB": DB_PATH
+}.items():
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"{name} not found: {path}")
 
 print("✅ All certificate files and database found", flush=True)
 
@@ -68,30 +63,20 @@ def on_disconnect(client, userdata, rc):
 
 # ---------------- MQTT CONNECT ----------------
 def start_mqtt():
-    client = Client(client_id=CLIENT_ID, protocol=MQTTv311)
-
-    # ✅ TLS setup with proper CA for AWS IoT Core
+    client = Client(client_id=CLIENT_ID, protocol=Client.MQTTv311)
     client.tls_set(
         ca_certs=CA_PATH,
         certfile=CERT_PATH,
         keyfile=KEY_PATH,
         tls_version=ssl.PROTOCOL_TLSv1_2
     )
-
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
+    client.loop_start()  # run network loop in background
 
-    client.loop_start()
-
-    # Retry connect until successful
-    while True:
+    while not connected_flag:
         try:
-            client.connect(ENDPOINT, PORT, keepalive=120)
-            break
-        except ssl.SSLError as ssl_err:
-            print(f"❌ SSL error: {ssl_err}", flush=True)
-            print("🔹 Check your CA certificate (AmazonRootCA1.pem)", flush=True)
-            time.sleep(5)
+            client.connect(ENDPOINT, PORT, keepalive=60)
         except Exception as e:
             print(f"❌ MQTT connect error: {e}", flush=True)
             time.sleep(5)
@@ -117,9 +102,7 @@ def upload_to_aws(row, retries=5):
             continue
 
         result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-        mqtt_client.loop(0.05)
-
-        if result.rc == mqtt_client.MQTT_ERR_SUCCESS:
+        if result.rc == 0:
             print(
                 f"➡️ Uploaded | id={row['id']} | "
                 f"BP={row['bp_pressure']} | FP={row['fp_pressure']} | "
@@ -135,7 +118,7 @@ def upload_to_aws(row, retries=5):
     return False
 
 # ---------------- DATABASE UPLOAD LOOP WITH BATCH FETCH ----------------
-BATCH_SIZE = 5
+BATCH_SIZE = 2  # small batch for Docker memory efficiency
 
 def upload_loop():
     try:
@@ -149,7 +132,7 @@ def upload_loop():
             rows = cursor.fetchall()
 
             if not rows:
-                time.sleep(1)
+                time.sleep(0.5)
                 continue
 
             for row in rows:
@@ -176,7 +159,7 @@ thread.start()
 # ---------------- KEEP SCRIPT RUNNING ----------------
 try:
     while True:
-        time.sleep(1)
+        time.sleep(1)  # lightweight main loop
 except KeyboardInterrupt:
     print("\n🛑 Interrupted by user. Exiting...")
 finally:
