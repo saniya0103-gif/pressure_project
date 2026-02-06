@@ -6,7 +6,7 @@ import os
 import gc
 import threading
 import glob
-from paho.mqtt.client import Client, CallbackAPIVersion, MQTTv311
+from paho.mqtt.client import Client, MQTTv311
 
 # ---------------- BASE PATH ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -16,7 +16,6 @@ AWS_PATH = os.path.join(BASE_DIR, "raspi")       # Certificates folder
 DB_PATH  = os.path.join(BASE_DIR, "db", "project.db")  # Database file
 
 # ---------------- AUTO-DETECT CERTIFICATES ----------------
-# Use AmazonRootCA1.pem for AWS IoT TLS verification
 CA_PATH = os.path.join(AWS_PATH, "AmazonRootCA1.pem")
 if not os.path.exists(CA_PATH):
     raise FileNotFoundError("AmazonRootCA1.pem not found in raspi folder")
@@ -69,15 +68,11 @@ def on_disconnect(client, userdata, rc):
 
 # ---------------- MQTT CONNECT ----------------
 def start_mqtt():
-    client = Client(
-        client_id=CLIENT_ID,
-        protocol=MQTTv311,
-        callback_api_version=CallbackAPIVersion.VERSION1
-    )
+    client = Client(client_id=CLIENT_ID, protocol=MQTTv311)
 
     # ✅ TLS setup with proper CA for AWS IoT Core
     client.tls_set(
-        ca_certs=CA_PATH,       # AmazonRootCA1.pem
+        ca_certs=CA_PATH,
         certfile=CERT_PATH,
         keyfile=KEY_PATH,
         tls_version=ssl.PROTOCOL_TLSv1_2
@@ -86,13 +81,12 @@ def start_mqtt():
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
 
-    # Non-blocking MQTT loop
     client.loop_start()
 
     # Retry connect until successful
     while True:
         try:
-            client.connect(ENDPOINT, PORT, keepalive=60)
+            client.connect(ENDPOINT, PORT, keepalive=120)
             break
         except ssl.SSLError as ssl_err:
             print(f"❌ SSL error: {ssl_err}", flush=True)
@@ -123,7 +117,7 @@ def upload_to_aws(row, retries=5):
             continue
 
         result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-        mqtt_client.loop(0.05)  # process network events
+        mqtt_client.loop(0.05)
 
         if result.rc == mqtt_client.MQTT_ERR_SUCCESS:
             print(
@@ -141,7 +135,7 @@ def upload_to_aws(row, retries=5):
     return False
 
 # ---------------- DATABASE UPLOAD LOOP WITH BATCH FETCH ----------------
-BATCH_SIZE = 5  # smaller batch for memory efficiency
+BATCH_SIZE = 5
 
 def upload_loop():
     try:
@@ -184,7 +178,7 @@ try:
     while True:
         time.sleep(1)
 except KeyboardInterrupt:
-    print("\n Interrupted by user. Exiting...")
+    print("\n🛑 Interrupted by user. Exiting...")
 finally:
     if mqtt_client:
         mqtt_client.disconnect()
