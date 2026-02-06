@@ -3,56 +3,57 @@ import time
 import json
 import ssl
 import os
+import gc
 import paho.mqtt.client as mqtt
 
-# ================= BASE PATH =================
+# ---------------- BASE PATH ----------------
 BASE_PATH = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspath(__file__))
 
 AWS_PATH = os.path.join(BASE_PATH, "aws_iot")
 DB_PATH  = os.path.join(BASE_PATH, "db", "project.db")
 
-# ================= FIND CERT FILES =================
-def find_file(endswith):
-    for f in os.listdir(AWS_PATH):
-        if f.endswith(endswith):
-            return os.path.join(AWS_PATH, f)
-    return None
-
+# ---------------- CERT PATHS ----------------
 CA_PATH   = os.path.join(AWS_PATH, "AmazonRootCA1.pem")
-CERT_PATH = find_file("-certificate.pem.crt")
-KEY_PATH  = find_file("-private.pem.key")
+CERT_PATH = os.path.join(AWS_PATH, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt")
+KEY_PATH  = os.path.join(AWS_PATH, "c5811382f2c2cfb311d53c99b4b0fadf4889674d-private.pem.key")
 
-# ================= VALIDATION =================
-missing = []
-if not os.path.exists(CA_PATH): missing.append("AmazonRootCA1.pem")
-if not CERT_PATH: missing.append("Device Certificate")
-if not KEY_PATH: missing.append("Private Key")
+# ---------------- VERIFY FILES ----------------
+for name, path in {
+    "CA": CA_PATH,
+    "CERT": CERT_PATH,
+    "KEY": KEY_PATH,
+    "DB": DB_PATH
+}.items():
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"{name} not found: {path}")
 
-if missing:
-    raise FileNotFoundError(f"Missing files: {', '.join(missing)}")
+print("✅ All certificate files found", flush=True)
 
-print("✅ All certificate files found")
-
-# ================= MQTT CONFIG =================
+# ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 PORT      = 8883
-CLIENT_ID = "Raspberry_pi"
-TOPIC     = "raspi/brake/pressure"
+CLIENT_ID = "Raspberry"
+TOPIC     = "brake/pressure"
 
-# ================= CALLBACKS =================
+# ---------------- MQTT CALLBACKS ----------------
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        print("✅ Connected to AWS IoT Core")
+        print("✅ Connected to AWS IoT Core", flush=True)
     else:
-        print("❌ MQTT connection failed, RC =", rc)
+        print("❌ MQTT connect failed:", rc, flush=True)
 
 def on_publish(client, userdata, mid):
-    print("📤 Message published")
+    print("📤 Message published", flush=True)
 
-# ================= MQTT CONNECT =================
+# ---------------- MQTT CONNECT ----------------
 def connect_mqtt():
-    print("🔄 Connecting to AWS IoT...")
-    client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
+    print("🔄 Connecting to AWS IoT...", flush=True)
+
+    client = mqtt.Client(
+        client_id=CLIENT_ID,
+        protocol=mqtt.MQTTv311
+    )
+
     client.on_connect = on_connect
     client.on_publish = on_publish
 
@@ -67,32 +68,28 @@ def connect_mqtt():
     client.loop_start()
     return client
 
-# ================= CONNECT =================
 mqtt_client = None
-while not mqtt_client:
+while mqtt_client is None:
     try:
         mqtt_client = connect_mqtt()
-        time.sleep(2)
     except Exception as e:
-        print("⚠️ MQTT error:", e)
+        print("❌ MQTT error:", e, flush=True)
         time.sleep(5)
 
-# ================= DATABASE =================
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-
-conn = sqlite3.connect(DB_PATH)
+# ---------------- DATABASE ----------------
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 conn.row_factory = sqlite3.Row
 cursor = conn.cursor()
 
-# ================= UPLOAD FUNCTION =================
+# ---------------- UPLOAD FUNCTION ----------------
 def upload_to_aws(row):
     payload = {
         "id": row["id"],
         "timestamp": row["created_at"],
-        "bp_pressure": row["bp_pressure"],
-        "fp_pressure": row["fp_pressure"],
-        "cr_pressure": row["cr_pressure"],
-        "bc_pressure": row["bc_pressure"]
+        "bp": row["bp_pressure"],
+        "fp": row["fp_pressure"],
+        "cr": row["cr_pressure"],
+        "bc": row["bc_pressure"]
     }
 
     result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
@@ -104,37 +101,41 @@ def upload_to_aws(row):
             f"FP={row['fp_pressure']} | "
             f"CR={row['cr_pressure']} | "
             f"BC={row['bc_pressure']} | "
-            f"time={row['created_at']}"
+            f"time={row['created_at']}",
+            flush=True
         )
+        gc.collect()
         return True
     else:
-        print("❌ Publish failed:", result.rc)
+        print("❌ Publish failed:", result.rc, flush=True)
         return False
 
-# ================= MAIN LOOP =================
+# ---------------- MAIN LOOP ----------------
 while True:
     cursor.execute("""
-        SELECT *
-        FROM brake_pressure_log
+        SELECT * FROM brake_pressure_log
         WHERE uploaded = 0
         ORDER BY created_at ASC
     """)
     rows = cursor.fetchall()
 
     if not rows:
-        print("⏳ No pending rows. Waiting...")
-        time.sleep(30)
+        print("⏳ No pending rows. Waiting...", flush=True)
+        gc.collect()
+        time.sleep(10)
         continue
 
     for row in rows:
-        if upload_to_aws(row):
-            cursor.execute(
-                "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
-                (row["id"],)
-            )
-            conn.commit()
-            print(f"✅ Marked uploaded | id={row['id']}")
-        else:
+        success = upload_to_aws(row)
+        if not success:
             break
 
-        time.sleep(2)
+        cursor.execute(
+            "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
+            (row["id"],)
+        )
+        conn.commit()
+
+        print(f"✅ Marked uploaded | id={row['id']}", flush=True)
+        gc.collect()
+        time.sleep(10)
