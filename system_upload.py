@@ -6,31 +6,35 @@ import os
 import gc
 import threading
 import glob
-from paho.mqtt.client import Client, CallbackAPIVersion
+from paho.mqtt.client import Client, CallbackAPIVersion, MQTTv311
 
 # ---------------- BASE PATH ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------- PATHS ----------------
-AWS_PATH = os.path.join(BASE_DIR, "raspi")           # Certificates folder
+AWS_PATH = os.path.join(BASE_DIR, "raspi")       # Certificates folder
 DB_PATH  = os.path.join(BASE_DIR, "db", "project.db")  # Database file
 
-# ---------------- CERTIFICATES ----------------
-CERT_PATH = glob.glob(os.path.join(AWS_PATH, "*-certificate.pem.crt"))[0]
-KEY_PATH  = glob.glob(os.path.join(AWS_PATH, "*-private.pem.key"))[0]
-CA_PATH   = os.path.join(AWS_PATH, "AmazonRootCA1.pem")
+# ---------------- AUTO-DETECT CERTIFICATES ----------------
+CA_PATHS = glob.glob(os.path.join(AWS_PATH, "AmazonRootCA*.pem"))
+if not CA_PATHS:
+    raise FileNotFoundError("CA certificate not found in raspi folder")
+CA_PATH = CA_PATHS[0]
 
-# ---------------- VERIFY FILES ----------------
-for name, path in {
-    "CA": CA_PATH,
-    "CERT": CERT_PATH,
-    "KEY": KEY_PATH,
-    "DB": DB_PATH
-}.items():
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"{name} not found: {path}")
+CERTS = glob.glob(os.path.join(AWS_PATH, "*-certificate.pem.crt"))
+KEYS = glob.glob(os.path.join(AWS_PATH, "*-private.pem.key"))
 
-print("✅ All certificate files found", flush=True)
+if not CERTS or not KEYS:
+    raise FileNotFoundError("Certificate or Private Key not found in raspi folder")
+
+CERT_PATH = CERTS[0]
+KEY_PATH = KEYS[0]
+
+# Verify database file exists
+if not os.path.exists(DB_PATH):
+    raise FileNotFoundError(f"Database not found: {DB_PATH}")
+
+print("✅ All certificate files and database found", flush=True)
 
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
@@ -54,20 +58,20 @@ def on_connect(client, userdata, flags, rc, properties=None):
         print("✅ Connected to AWS IoT Core", flush=True)
     else:
         connected_flag = False
-        print(f"MQTT connect failed: {rc}", flush=True)
+        print(f"❌ MQTT connect failed: {rc}", flush=True)
 
 def on_disconnect(client, userdata, rc):
     global connected_flag
     connected_flag = False
     if rc != 0:
-        print("Disconnected unexpectedly. Will reconnect automatically...", flush=True)
+        print("⚠️ Disconnected unexpectedly. Will reconnect automatically...", flush=True)
 
 # ---------------- MQTT CONNECT ----------------
 def start_mqtt():
     client = Client(
         client_id=CLIENT_ID,
-        protocol=Client.MQTTv311,
-        callback_api_version=CallbackAPIVersion.VERSION1  # ✅ Ensures old callback format
+        protocol=MQTTv311,  # ✅ Fixed
+        callback_api_version=CallbackAPIVersion.VERSION1  # ✅ Fixed
     )
     client.tls_set(
         ca_certs=CA_PATH,
@@ -78,7 +82,7 @@ def start_mqtt():
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
 
-    # Non-blocking loop to reduce memory spikes
+    # Non-blocking loop to reduce memory usage
     client.loop_start()
 
     while True:
@@ -86,7 +90,7 @@ def start_mqtt():
             client.connect(ENDPOINT, PORT, keepalive=60)
             break
         except Exception as e:
-            print(f"MQTT connect error: {e}", flush=True)
+            print(f"❌ MQTT connect error: {e}", flush=True)
             time.sleep(5)
 
     return client
@@ -153,9 +157,9 @@ def upload_loop():
                         (row["id"],)
                     )
                     conn.commit()
-                    print(f"Marked uploaded | id={row['id']}", flush=True)
+                    print(f"✅ Marked uploaded | id={row['id']}", flush=True)
                 else:
-                    print(f"Could not upload id={row['id']}. Will retry later.", flush=True)
+                    print(f"❌ Could not upload id={row['id']}. Will retry later.", flush=True)
 
     except KeyboardInterrupt:
         pass
@@ -171,7 +175,7 @@ try:
     while True:
         time.sleep(1)
 except KeyboardInterrupt:
-    print("\n Interrupted by user. Exiting...")
+    print("\n🛑 Interrupted by user. Exiting...")
 finally:
     if mqtt_client:
         mqtt_client.disconnect()
