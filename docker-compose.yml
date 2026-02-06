@@ -16,3 +16,7 @@ services:
     restart: always
     stdin_open: true
     tty: true
+    deploy:
+      resources:
+        limits:
+          memory: 300M
