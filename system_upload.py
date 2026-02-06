@@ -42,50 +42,24 @@ conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=10)
 conn.row_factory = sqlite3.Row
 cursor = conn.cursor()
 
-# ---------------- UPLOAD FUNCTION ----------------
-def upload_to_aws(client, row, retries=5):
-    payload = {
-        "id": row["id"],
-        "timestamp": row["created_at"],
-        "bp": row["bp_pressure"],
-        "fp": row["fp_pressure"],
-        "cr": row["cr_pressure"],
-        "bc": row["bc_pressure"]
-    }
-
-    for _ in range(retries):
-        if not client.is_connected():
-            time.sleep(1)
-            continue
-
-        result = client.publish(TOPIC, json.dumps(payload), qos=1)
-        client.loop()  # process network events
-
-        if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            print(
-                f"➡️ Uploaded | id={row['id']} | "
-                f"BP={row['bp_pressure']} | FP={row['fp_pressure']} | "
-                f"CR={row['cr_pressure']} | BC={row['bc_pressure']} | "
-                f"time={row['created_at']}",
-                flush=True
-            )
-            gc.collect()
-            return True
-
-        time.sleep(1)
-
-    return False
+# ---------------- MQTT FLAGS ----------------
+connected_flag = False
 
 # ---------------- MQTT CALLBACKS ----------------
 def on_connect(client, userdata, flags, rc, properties=None):
+    global connected_flag
     if rc == 0:
+        connected_flag = True
         print("✅ Connected to AWS IoT Core", flush=True)
     else:
+        connected_flag = False
         print(f"❌ MQTT connect failed: {rc}", flush=True)
 
 def on_disconnect(client, userdata, rc):
+    global connected_flag
+    connected_flag = False
     if rc != 0:
-        print("⚠️ Disconnected unexpectedly. Reconnecting...", flush=True)
+        print("⚠️ Disconnected unexpectedly. Will reconnect automatically...", flush=True)
 
 # ---------------- MQTT CONNECT ----------------
 def start_mqtt():
@@ -111,7 +85,41 @@ def start_mqtt():
 
 mqtt_client = start_mqtt()
 
-# ---------------- DATABASE UPLOAD THREAD ----------------
+# ---------------- UPLOAD FUNCTION ----------------
+def upload_to_aws(row, retries=5):
+    payload = {
+        "id": row["id"],
+        "timestamp": row["created_at"],
+        "bp": row["bp_pressure"],
+        "fp": row["fp_pressure"],
+        "cr": row["cr_pressure"],
+        "bc": row["bc_pressure"]
+    }
+
+    for _ in range(retries):
+        if not connected_flag:
+            time.sleep(0.5)
+            continue
+
+        result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
+        mqtt_client.loop(0.1)  # process network events
+
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            print(
+                f"➡️ Uploaded | id={row['id']} | "
+                f"BP={row['bp_pressure']} | FP={row['fp_pressure']} | "
+                f"CR={row['cr_pressure']} | BC={row['bc_pressure']} | "
+                f"time={row['created_at']}",
+                flush=True
+            )
+            gc.collect()
+            return True
+
+        time.sleep(0.5)
+
+    return False
+
+# ---------------- DATABASE UPLOAD LOOP ----------------
 def upload_loop():
     try:
         while True:
@@ -123,11 +131,11 @@ def upload_loop():
             rows = cursor.fetchall()
 
             if not rows:
-                time.sleep(2)  # short sleep prevents keepalive timeout
+                time.sleep(1)  # short sleep prevents keepalive timeout
                 continue
 
             for row in rows:
-                success = upload_to_aws(mqtt_client, row)
+                success = upload_to_aws(row)
                 if success:
                     cursor.execute(
                         "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
