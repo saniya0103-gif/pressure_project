@@ -5,6 +5,7 @@ import ssl
 import os
 import gc
 import threading
+import glob
 from paho.mqtt.client import Client, CallbackAPIVersion
 
 # ---------------- BASE PATH ----------------
@@ -15,9 +16,9 @@ AWS_PATH = os.path.join(BASE_DIR, "raspi")           # Certificates folder
 DB_PATH  = os.path.join(BASE_DIR, "db", "project.db")  # Database file
 
 # ---------------- CERTIFICATES ----------------
+CERT_PATH = glob.glob(os.path.join(AWS_PATH, "*-certificate.pem.crt"))[0]
+KEY_PATH  = glob.glob(os.path.join(AWS_PATH, "*-private.pem.key"))[0]
 CA_PATH   = os.path.join(AWS_PATH, "AmazonRootCA1.pem")
-CERT_PATH = os.path.join(AWS_PATH, "certificate.pem.crt")
-KEY_PATH  = os.path.join(AWS_PATH, "private.pem.key")
 
 # ---------------- VERIFY FILES ----------------
 for name, path in {
