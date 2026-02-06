@@ -11,3 +11,5 @@ services:
       - BLINKA_FORCEBOARD=RASPBERRY_PI_5
       - BLINKA_FORCECHIP=BCM2712
     restart: unless-stopped
+    stdin_open: true
+    tty: true
