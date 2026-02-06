@@ -18,11 +18,11 @@ ROOT_CA = os.path.join(CERT_DIR, "AmazonRootCA3.pem")
 CERT_FILE = os.path.join(CERT_DIR, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-certificate.pem.crt")
 KEY_FILE = os.path.join(CERT_DIR, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-private.pem.key")
 
-# ---------------- AWS IoT SETTINGS ----------------
-AWS_ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
-CLIENT_ID = "Raspberry_pi"  # updated client ID
-TOPIC = "brake/pressure"
+CLIENT_ID = "Raspberry_pi"
+AWS_ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"  # e.g., amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com
 PORT = 8883
+TOPIC = "brake/pressure"
+
 
 # ---------------- VERIFY FILES ----------------
 for f in [ROOT_CA, CERT_FILE, KEY_FILE, DB_PATH]:
