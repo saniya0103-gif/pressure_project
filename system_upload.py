@@ -67,20 +67,22 @@ def connect_mqtt():
         tls_version=ssl.PROTOCOL_TLSv1_2
     )
 
-    # Retry until fully connected
+    # Connect once
     while True:
         try:
             client.connect(ENDPOINT, PORT, keepalive=60)
-            client.loop_start()  # Start network loop once
             break
         except Exception as e:
             print("❌ MQTT connect error:", e, flush=True)
             time.sleep(5)
 
-    # Wait until connected_flag is True
+    # Start network loop in background
+    client.loop_start()
+
+    # Wait until fully connected
     while not connected_flag:
         print("⏳ Waiting for MQTT connection...", flush=True)
-        time.sleep(2)
+        time.sleep(1)
 
     return client
 
@@ -112,10 +114,8 @@ def upload_to_aws(row, retries=5):
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
             print(
                 f"➡️ Uploaded | id={row['id']} | "
-                f"BP={row['bp_pressure']} | "
-                f"FP={row['fp_pressure']} | "
-                f"CR={row['cr_pressure']} | "
-                f"BC={row['bc_pressure']} | "
+                f"BP={row['bp_pressure']} | FP={row['fp_pressure']} | "
+                f"CR={row['cr_pressure']} | BC={row['bc_pressure']} | "
                 f"time={row['created_at']}",
                 flush=True
             )
