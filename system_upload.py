@@ -44,6 +44,7 @@ def on_connect(client, userdata, flags, rc, properties=None):
     global connected_flag
     if rc == 0:
         connected_flag = True
+        print("✅ Connected to AWS IoT Core", flush=True)
     else:
         connected_flag = False
         print(f"❌ MQTT connect failed: {rc}", flush=True)
@@ -56,7 +57,6 @@ def on_disconnect(client, userdata, rc):
 
 # ---------------- MQTT CONNECT ----------------
 def connect_mqtt():
-    global connected_flag
     client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
@@ -71,18 +71,18 @@ def connect_mqtt():
     while True:
         try:
             client.connect(ENDPOINT, PORT, keepalive=60)
-            client.loop_start()
             break
         except Exception as e:
             print(f"❌ MQTT connect error: {e}", flush=True)
             time.sleep(5)
 
-    # Wait until fully connected
+    # Use loop_forever to handle keepalive automatically
+    client.loop_start()
+    # Wait until connected
     while not connected_flag:
         print("⏳ Waiting for MQTT connection...", flush=True)
         time.sleep(1)
 
-    print("✅ Connected to AWS IoT Core", flush=True)
     return client
 
 mqtt_client = connect_mqtt()
@@ -104,12 +104,11 @@ def upload_to_aws(row, retries=5):
     }
 
     for _ in range(retries):
-        if not mqtt_client.is_connected():
+        if not connected_flag:
             time.sleep(1)
             continue
 
         result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-        mqtt_client.loop()  # process network events
 
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
             print(
@@ -122,7 +121,6 @@ def upload_to_aws(row, retries=5):
             gc.collect()
             return True
 
-        # small delay before retry
         time.sleep(1)
 
     return False
@@ -139,7 +137,7 @@ try:
 
         if not rows:
             print("⏳ No pending rows. Waiting...", flush=True)
-            time.sleep(10)
+            time.sleep(5)  # shorter sleep prevents keepalive timeout
             continue
 
         for row in rows:
