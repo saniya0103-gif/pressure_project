@@ -5,8 +5,14 @@ import ssl
 import sqlite3
 import paho.mqtt.client as mqtt
 
-# ================= PATHS =================
-BASE_PATH = "/home/pi_123/data/src/pressure_project"
+# ================= PATH CONFIG (FINAL FIX) =================
+# Docker will set APP_BASE_PATH=/app
+# Local run will use the default path
+BASE_PATH = os.getenv(
+    "APP_BASE_PATH",
+    "/home/pi_123/data/src/pressure_project"
+)
+
 DB_PATH = f"{BASE_PATH}/db/project.db"
 RASPI_PATH = f"{BASE_PATH}/raspi"
 
@@ -18,8 +24,9 @@ ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 CLIENT_ID = "Raspberry_pi"
 TOPIC = "brake/pressure"
 
-# ================= DEBUG =================
+# ================= DEBUG CHECK =================
 print("=== DEBUG START ===")
+print("BASE_PATH:", BASE_PATH)
 print("DB exists:", os.path.exists(DB_PATH))
 print("CA exists:", os.path.exists(CA_FILE))
 print("CERT exists:", os.path.exists(CERT_FILE))
@@ -90,9 +97,7 @@ try:
             )
             conn.commit()
 
-            print(
-                f"✅ Uploaded & marked | id={id_} timestamp=\"{created_at}\""
-            )
+            print(f'✅ Uploaded & marked | id={id_} timestamp="{created_at}"')
             print(
                 f"   AWS IoT sent: id={id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp:{created_at}"
             )
