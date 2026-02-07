@@ -23,7 +23,7 @@ if os.path.exists(RASPI_PATH):
 else:
     print("RASPI folder not found:", RASPI_PATH, flush=True)
 
-# ---------------- PATHS (USE EXACT NAMES) ----------------
+# ---------------- CERTIFICATE PATHS ----------------
 paths = {
     "DB": DB_PATH,
     "CA": os.path.join(RASPI_PATH, "AmazonRootCA1 (4).pem"),
@@ -44,50 +44,58 @@ KEY_PATH  = paths["KEY"]
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 PORT      = 8883
-CLIENT_ID = "Raspberry_pi"
+CLIENT_ID = "Raspberry_pi"  # MUST match AWS IoT policy
 TOPIC     = "brake/pressure"
 
 # ---------------- CALLBACKS ----------------
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         print("✅ Connected to AWS IoT Core")
     else:
-        print("MQTT connection failed, RC =", rc)
+        print("❌ MQTT connection failed, RC =", rc)
 
 def on_publish(client, userdata, mid):
-    print("Data published --->")
+    print("Data published ---> mid:", mid)
+
+def on_disconnect(client, userdata, rc):
+    print("⚠ MQTT disconnected, RC:", rc)
+    # Automatic reconnect
+    while True:
+        try:
+            client.reconnect()
+            break
+        except Exception as e:
+            print("Reconnect failed:", e)
+            time.sleep(5)
 
 # ---------------- MQTT CONNECT ----------------
 def connect_mqtt():
+    client = mqtt.Client(
+        client_id=CLIENT_ID,
+        protocol=mqtt.MQTTv311
+    )
+    client.tls_set(
+        ca_certs=CA_PATH,
+        certfile=CERT_PATH,
+        keyfile=KEY_PATH,
+        tls_version=ssl.PROTOCOL_TLSv1_2
+    )
+    client.on_connect = on_connect
+    client.on_publish = on_publish
+    client.on_disconnect = on_disconnect
+
     while True:
         try:
-            print("🔌 Connecting to AWS IoT...")
-            client = mqtt.Client(
-                client_id=CLIENT_ID,
-                protocol=mqtt.MQTTv311
-            )
-            client.on_connect = on_connect
-            client.on_publish = on_publish
-
-            client.tls_set(
-                ca_certs=CA_PATH,
-                certfile=CERT_PATH,
-                keyfile=KEY_PATH,
-                tls_version=ssl.PROTOCOL_TLSv1_2
-            )
-
             client.connect(ENDPOINT, PORT, keepalive=60)
             client.loop_start()
             return client
         except Exception as e:
-            print("❌ MQTT connection error:", e)
+            print("🔌 MQTT connection error:", e)
             time.sleep(5)
-
-# ---------------- CONNECT MQTT ----------------
-mqtt_client = connect_mqtt()
 
 # ---------------- DATABASE ----------------
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+
 conn = sqlite3.connect(DB_PATH)
 conn.row_factory = sqlite3.Row
 cursor = conn.cursor()
@@ -104,23 +112,27 @@ def upload_to_aws(row):
         "aws_status": "uploaded"
     }
 
-    result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-    if result.rc == mqtt.MQTT_ERR_SUCCESS:
-        print(
-            f"➡️ Uploaded | id={row['id']} | "
-            f"BP={row['bp_pressure']} bar | "
-            f"FP={row['fp_pressure']} bar | "
-            f"CR={row['cr_pressure']} bar | "
-            f"BC={row['bc_pressure']} bar | "
-            f"created_at={row['created_at']}"
-        )
-        return True
-    else:
-        print("Publish failed:", result.rc)
+    try:
+        result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            print(
+                f"➡️ Uploaded | id={row['id']} | "
+                f"BP={row['bp_pressure']} bar | "
+                f"FP={row['fp_pressure']} bar | "
+                f"CR={row['cr_pressure']} bar | "
+                f"BC={row['bc_pressure']} bar | "
+                f"created_at={row['created_at']}"
+            )
+            return True
+        else:
+            print("❌ Publish failed, RC:", result.rc)
+            return False
+    except Exception as e:
+        print("❌ Exception while publishing:", e)
         return False
 
 # ---------------- MAIN LOOP ----------------
-try:
+def main_loop():
     while True:
         cursor.execute("""
             SELECT * FROM brake_pressure_log
@@ -157,6 +169,20 @@ try:
                 f"created_at={row['created_at']}"
             )
 
-except KeyboardInterrupt:
+# ---------------- GRACEFUL SHUTDOWN ----------------
+def shutdown(sig, frame):
     print("🛑 Graceful shutdown")
+    try:
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
+        conn.close()
+    except:
+        pass
     sys.exit(0)
+
+signal.signal(signal.SIGTERM, shutdown)
+signal.signal(signal.SIGINT, shutdown)
+
+# ---------------- START ----------------
+mqtt_client = connect_mqtt()
+main_loop()
