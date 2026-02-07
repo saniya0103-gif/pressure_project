@@ -15,6 +15,6 @@ services:
       - BLINKA_USE_RPI_GPIO=1
       - PYTHONUNBUFFERED=1
       - APP_BASE_PATH=/app
-    restart: always
+    restart: unless-stopped
     stdin_open: true
     tty: true
