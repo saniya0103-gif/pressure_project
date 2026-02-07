@@ -21,27 +21,28 @@ print("List BASE_PATH:", os.listdir(BASE_PATH), flush=True)
 if os.path.exists(RASPI_PATH):
     print("List RASPI_PATH:", os.listdir(RASPI_PATH), flush=True)
 else:
-    print("RASPI folder not found:", RASPI_PATH, flush=True)
+    print("❌ RASPI folder not found:", RASPI_PATH, flush=True)
+    sys.exit(1)
 
-paths = {
-    "DB": DB_PATH,
-    "CA": os.path.join(RASPI_PATH, "AmazonRootCA1.pem"),
-    "CERT": os.path.join(RASPI_PATH, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"),
-    "KEY": os.path.join(RASPI_PATH, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key")
-}
+# ---------------- DYNAMIC CERTIFICATE DETECTION ----------------
+CERT_PATH = next((os.path.join(RASPI_PATH, f) for f in os.listdir(RASPI_PATH) if f.endswith("-certificate.pem.crt")), None)
+KEY_PATH  = next((os.path.join(RASPI_PATH, f) for f in os.listdir(RASPI_PATH) if f.endswith("-private.pem.key")), None)
+CA_PATH   = next((os.path.join(RASPI_PATH, f) for f in os.listdir(RASPI_PATH) if f.startswith("AmazonRootCA") and f.endswith(".pem")), None)
 
-for name, path in paths.items():
-    print(f"{name} exists:", os.path.exists(path), path, flush=True)
+if not all([CERT_PATH, KEY_PATH, CA_PATH]):
+    print("❌ Certificate files not found in raspi folder!")
+    sys.exit(1)
 
-DB_PATH   = paths["DB"]
-CA_PATH   = paths["CA"]
-CERT_PATH = paths["CERT"]
-KEY_PATH  = paths["KEY"]
+print("DB exists:", os.path.exists(DB_PATH), DB_PATH)
+print("CA exists:", os.path.exists(CA_PATH), CA_PATH)
+print("CERT exists:", os.path.exists(CERT_PATH), CERT_PATH)
+print("KEY exists:", os.path.exists(KEY_PATH), KEY_PATH)
+print("=== DEBUG END ===", flush=True)
 
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 PORT      = 8883
-CLIENT_ID = "Raspberry_pi"
+CLIENT_ID = "Raspberry"
 TOPIC     = "brake/pressure"
 
 # ---------------- CALLBACKS ----------------
