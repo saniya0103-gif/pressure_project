@@ -3,32 +3,40 @@ import time
 import json
 import ssl
 import os
-import threading
 import paho.mqtt.client as mqtt
+import signal
+import sys
 
-# ---------------- BASE PATH ----------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# ---------------- DYNAMIC BASE PATH ----------------
+BASE_PATH = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspath(__file__))
 
-# ---------------- PATHS ----------------
-AWS_PATH = os.path.join(BASE_DIR, "raspi")       # Certificates folder
-DB_PATH  = os.path.join(BASE_DIR, "db", "project.db")  # Database file
+# ---------------- DEBUG ----------------
+print("=== DEBUG START ===", flush=True)
+print("PWD:", BASE_PATH, flush=True)
 
-# ---------------- CERTIFICATES ----------------
-CA_PATH   = os.path.join(AWS_PATH, "AmazonRootCA1.pem")
-CERT_PATH = os.path.join(AWS_PATH, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-certificate.pem.crt")
-KEY_PATH  = os.path.join(AWS_PATH, "0a0f7d38323fdef876a81f1a8d6671502e80d50d6e2fdc753a68baa51cfcf5ef-private.pem.key")
+RASPI_PATH = os.path.join(BASE_PATH, "raspi")   # Certificates folder
+DB_PATH    = os.path.join(BASE_PATH, "db", "project.db")
 
-# ---------------- VERIFY FILES ----------------
-for name, path in {
-    "CA": CA_PATH,
-    "CERT": CERT_PATH,
-    "KEY": KEY_PATH,
-    "DB": DB_PATH
-}.items():
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"{name} not found: {path}")
+print("List BASE_PATH:", os.listdir(BASE_PATH), flush=True)
+if os.path.exists(RASPI_PATH):
+    print("List RASPI_PATH:", os.listdir(RASPI_PATH), flush=True)
+else:
+    print("RASPI folder not found:", RASPI_PATH, flush=True)
 
-print("✅ All certificate files and database found", flush=True)
+paths = {
+    "DB": DB_PATH,
+    "CA": os.path.join(RASPI_PATH, "AmazonRootCA1.pem"),
+    "CERT": os.path.join(RASPI_PATH, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-certificate.pem.crt"),
+    "KEY": os.path.join(RASPI_PATH, "c5811382f2c2cfb311d53c99b4b0fadf4889674d37dd356864d17f059189a62d-private.pem.key")
+}
+
+for name, path in paths.items():
+    print(f"{name} exists:", os.path.exists(path), path, flush=True)
+
+DB_PATH   = paths["DB"]
+CA_PATH   = paths["CA"]
+CERT_PATH = paths["CERT"]
+KEY_PATH  = paths["KEY"]
 
 # ---------------- MQTT CONFIG ----------------
 ENDPOINT  = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
@@ -36,132 +44,127 @@ PORT      = 8883
 CLIENT_ID = "Raspberry_pi"
 TOPIC     = "brake/pressure"
 
-# ---------------- MQTT FLAGS ----------------
-connected_flag = False
-
-# ---------------- MQTT CALLBACKS ----------------
-def on_connect(client, userdata, flags, rc, properties=None):
-    global connected_flag
+# ---------------- CALLBACKS ----------------
+def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        connected_flag = True
-        print("✅ Connected to AWS IoT Core", flush=True)
+        print("✅ Connected to AWS IoT Core")
     else:
-        connected_flag = False
-        print(f"❌ MQTT connect failed: {rc}", flush=True)
+        print("❌ MQTT connection failed, RC =", rc)
 
-def on_disconnect(client, userdata, rc):
-    global connected_flag
-    connected_flag = False
-    if rc != 0:
-        print("⚠️ Disconnected unexpectedly. Will reconnect automatically...", flush=True)
+def on_publish(client, userdata, mid):
+    print("📤 Data published --->")
+
+# ---------------- GRACEFUL SHUTDOWN ----------------
+def shutdown(sig, frame):
+    print("🛑 Graceful shutdown", flush=True)
+    if mqtt_client is not None:
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
+    conn.close()
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, shutdown)
+signal.signal(signal.SIGINT, shutdown)
 
 # ---------------- MQTT CONNECT ----------------
-def start_mqtt():
-    client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
+def connect_mqtt():
+    print("🔌 Connecting to AWS IoT...")
+    client = mqtt.Client(
+        client_id=CLIENT_ID,
+        protocol=mqtt.MQTTv311,
+        transport="tcp"
+    )
+
+    client.on_connect = on_connect
+    client.on_publish = on_publish
+
     client.tls_set(
         ca_certs=CA_PATH,
         certfile=CERT_PATH,
         keyfile=KEY_PATH,
         tls_version=ssl.PROTOCOL_TLSv1_2
     )
-    client.on_connect = on_connect
-    client.on_disconnect = on_disconnect
 
-    while True:
-        try:
-            client.connect(ENDPOINT, PORT, keepalive=60)
-            break
-        except Exception as e:
-            print(f"❌ MQTT connect error: {e}", flush=True)
-            time.sleep(5)
-
+    client.connect(ENDPOINT, PORT, keepalive=60)
+    client.loop_start()
     return client
 
-mqtt_client = start_mqtt()
+# ---------------- WAIT FOR MQTT ----------------
+mqtt_client = None
+while mqtt_client is None:
+    try:
+        mqtt_client = connect_mqtt()
+    except Exception as e:
+        print("❌ MQTT error:", e)
+        time.sleep(5)
+
+# ---------------- DATABASE ----------------
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+conn = sqlite3.connect(DB_PATH)
+conn.row_factory = sqlite3.Row
+cursor = conn.cursor()
 
 # ---------------- UPLOAD FUNCTION ----------------
-def upload_to_aws(row, retries=5):
+def upload_to_aws(row):
     payload = {
-        "id": row["id"],
-        "timestamp": row["created_at"],
-        "bp": row["bp_pressure"],
-        "fp": row["fp_pressure"],
-        "cr": row["cr_pressure"],
-        "bc": row["bc_pressure"]
+        "created_at": row["created_at"],
+        "bp_pressure": row["bp_pressure"],
+        "fp_pressure": row["fp_pressure"],
+        "cr_pressure": row["cr_pressure"],
+        "bc_pressure": row["bc_pressure"],
+        "db_uploaded": row["uploaded"],
+        "aws_status": "uploaded"
     }
 
-    for _ in range(retries):
-        if not connected_flag:
-            time.sleep(0.5)
-            continue
+    result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
 
-        result = mqtt_client.publish(TOPIC, json.dumps(payload), qos=1)
-        mqtt_client.loop(0.1)  # process network events
+    if result.rc == mqtt.MQTT_ERR_SUCCESS:
+        print(
+            f"➡️ Uploaded | id={row['id']} | "
+            f"BP={row['bp_pressure']} bar | "
+            f"FP={row['fp_pressure']} bar | "
+            f"CR={row['cr_pressure']} bar | "
+            f"BC={row['bc_pressure']} bar | "
+            f"created_at={row['created_at']}"
+        )
+        return True
+    else:
+        print("❌ Publish failed:", result.rc)
+        return False
 
-        if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            print(
-                f"➡️ Uploaded | id={row['id']} | "
-                f"BP={row['bp_pressure']} | FP={row['fp_pressure']} | "
-                f"CR={row['cr_pressure']} | BC={row['bc_pressure']} | "
-                f"time={row['created_at']}",
-                flush=True
-            )
-            return True
+# ---------------- MAIN LOOP ----------------
+while True:
+    cursor.execute("""
+        SELECT * FROM brake_pressure_log
+        WHERE uploaded = 0
+        ORDER BY created_at ASC
+    """)
+    rows = cursor.fetchall()
 
-        time.sleep(0.5)
+    if not rows:
+        print("⏳ No pending rows. Waiting...")
+        time.sleep(5)
+        continue
 
-    return False
+    for row in rows:
+        success = upload_to_aws(row)
+        if not success:
+            print("⚠️ Upload failed, will retry later.")
+            break
 
-# ---------------- DATABASE UPLOAD LOOP ----------------
-BATCH_SIZE = 10  # Fetch 10 rows at a time
+        time.sleep(2)
 
-def upload_loop():
-    try:
-        # Each thread gets its own connection
-        thread_conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=10)
-        thread_conn.row_factory = sqlite3.Row
-        thread_cursor = thread_conn.cursor()
+        cursor.execute(
+            "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
+            (row["id"],)
+        )
+        conn.commit()
 
-        while True:
-            thread_cursor.execute("""
-                SELECT * FROM brake_pressure_log
-                WHERE uploaded = 0
-                ORDER BY created_at ASC
-                LIMIT ?
-            """, (BATCH_SIZE,))
-            rows = thread_cursor.fetchall()
-
-            if not rows:
-                time.sleep(1)
-                continue
-
-            for row in rows:
-                success = upload_to_aws(row)
-                if success:
-                    thread_cursor.execute(
-                        "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
-                        (row["id"],)
-                    )
-                    thread_conn.commit()
-                    print(f"✅ Marked uploaded | id={row['id']}", flush=True)
-                else:
-                    print(f"❌ Could not upload id={row['id']}. Will retry later.", flush=True)
-
-    except KeyboardInterrupt:
-        pass
-    finally:
-        thread_conn.close()
-
-# ---------------- START UPLOAD THREAD ----------------
-thread = threading.Thread(target=upload_loop, daemon=True)
-thread.start()
-
-# ---------------- START MQTT LOOP FOREVER ----------------
-try:
-    mqtt_client.loop_forever(retry_first_connection=True)
-except KeyboardInterrupt:
-    print("\n🛑 Interrupted by user. Exiting...")
-finally:
-    if mqtt_client:
-        mqtt_client.disconnect()
-    print("✅ Cleanup done. Exiting program.")
+        print(
+            f"✅ Marked uploaded | id={row['id']} | "
+            f"BP={row['bp_pressure']} bar | "
+            f"FP={row['fp_pressure']} bar | "
+            f"CR={row['cr_pressure']} bar | "
+            f"BC={row['bc_pressure']} bar | "
+            f"created_at={row['created_at']}"
+        )
