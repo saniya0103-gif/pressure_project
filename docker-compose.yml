@@ -9,11 +9,11 @@ services:
       - ./raspi:/app/raspi:ro
       - ./system_upload.py:/app/system_upload.py
     environment:
+      - APP_BASE_PATH=/app
       - BLINKA_FORCEBOARD=RASPBERRY_PI_5
       - BLINKA_FORCECHIP=BCM2712
       - BLINKA_USE_RPI_GPIO=1
       - PYTHONUNBUFFERED=1
-      - APP_BASE_PATH=/app
     restart: always
     stdin_open: true
     tty: true
