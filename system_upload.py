@@ -2,13 +2,13 @@ import os
 import json
 import time
 import ssl
-import sqlite3
 import signal
 import sys
+import sqlite3
 import paho.mqtt.client as mqtt
 
 # ================= PATH CONFIG =================
-BASE_PATH = os.getenv("APP_BASE_PATH", "/app")
+BASE_PATH = os.getenv("APP_BASE_PATH", "/home/pi_123/data/src/pressure_project")
 
 DB_PATH = f"{BASE_PATH}/db/project.db"
 RASPI_PATH = f"{BASE_PATH}/raspi"
@@ -23,8 +23,8 @@ TOPIC = "brake/pressure"
 
 RUNNING = True
 
-# ================= SIGNAL HANDLER =================
-def shutdown_handler(sig, frame):
+# ================= SIGNAL HANDLING =================
+def shutdown_handler(signum, frame):
     global RUNNING
     print("🛑 Shutdown signal received")
     RUNNING = False
@@ -48,8 +48,13 @@ def on_connect(client, userdata, flags, rc):
     else:
         print("❌ MQTT connect failed, RC:", rc)
 
-client = mqtt.Client(client_id=CLIENT_ID)
+def on_disconnect(client, userdata, rc):
+    print("⚠️ MQTT disconnected, RC:", rc)
+
+client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
 client.on_connect = on_connect
+client.on_disconnect = on_disconnect
+
 client.tls_set(
     ca_certs=CA_FILE,
     certfile=CERT_FILE,
@@ -57,14 +62,13 @@ client.tls_set(
     tls_version=ssl.PROTOCOL_TLSv1_2
 )
 
+client.reconnect_delay_set(min_delay=1, max_delay=30)
 client.connect(ENDPOINT, 8883)
 client.loop_start()
 
 # ================= DATABASE =================
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = conn.cursor()
-
-print("🚀 Uploader running...")
 
 try:
     while RUNNING:
@@ -83,7 +87,7 @@ try:
         row = cursor.fetchone()
 
         if not row:
-            time.sleep(5)  # ⬅ prevents CPU abuse
+            time.sleep(2)
             continue
 
         id_, bp, fp, cr, bc, created_at = row
@@ -97,9 +101,10 @@ try:
             "timestamp": created_at
         }
 
-        result = client.publish(TOPIC, json.dumps(payload), qos=1)
+        info = client.publish(TOPIC, json.dumps(payload), qos=1)
+        info.wait_for_publish()
 
-        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+        if info.rc == mqtt.MQTT_ERR_SUCCESS:
             cursor.execute(
                 "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
                 (id_,)
@@ -107,10 +112,14 @@ try:
             conn.commit()
 
             print(f'✅ Uploaded | id={id_} timestamp="{created_at}"')
+            print(
+                f'📤 AWS IoT sent data:\n'
+                f'   {{ id: {id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp: {created_at} }}'
+            )
         else:
-            print("❌ Publish failed, RC:", result.rc)
+            print("❌ Publish failed, RC:", info.rc)
 
-        time.sleep(2)
+        time.sleep(1)
 
 finally:
     print("🔻 Cleaning up...")
