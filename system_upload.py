@@ -9,6 +9,7 @@ import paho.mqtt.client as mqtt
 
 # ================= PATH CONFIG =================
 BASE_PATH = os.getenv("APP_BASE_PATH", "/home/pi_123/data/src/pressure_project")
+
 DB_PATH = f"{BASE_PATH}/db/project.db"
 RASPI_PATH = f"{BASE_PATH}/raspi"
 
@@ -31,7 +32,7 @@ def shutdown_handler(signum, frame):
 signal.signal(signal.SIGTERM, shutdown_handler)
 signal.signal(signal.SIGINT, shutdown_handler)
 
-# ================= DEBUG CHECKS =================
+# ================= DEBUG =================
 print("=== DEBUG START ===")
 print("BASE_PATH:", BASE_PATH)
 print("DB exists:", os.path.exists(DB_PATH))
@@ -40,7 +41,7 @@ print("CERT exists:", os.path.exists(CERT_FILE))
 print("KEY exists:", os.path.exists(KEY_FILE))
 print("=== DEBUG END ===")
 
-# ================= MQTT SETUP =================
+# ================= MQTT =================
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print("✅ Connected to AWS IoT Core")
@@ -49,52 +50,51 @@ def on_connect(client, userdata, flags, rc):
 
 def on_disconnect(client, userdata, rc):
     print(f"⚠️ MQTT disconnected, RC: {rc}")
+    # Auto-reconnect will handle it
 
 client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
 client.on_connect = on_connect
 client.on_disconnect = on_disconnect
 
-client.tls_set(
-    ca_certs=CA_FILE,
-    certfile=CERT_FILE,
-    keyfile=KEY_FILE,
-    tls_version=ssl.PROTOCOL_TLSv1_2
-)
+try:
+    client.tls_set(
+        ca_certs=CA_FILE,
+        certfile=CERT_FILE,
+        keyfile=KEY_FILE,
+        tls_version=ssl.PROTOCOL_TLSv1_2
+    )
+except Exception as e:
+    print("❌ TLS setup failed:", e)
 
-# Slow reconnect to avoid AWS throttling
-client.reconnect_delay_set(min_delay=2, max_delay=60)
+# Auto-reconnect delays
+client.reconnect_delay_set(min_delay=1, max_delay=120)
 
-# Connect and start loop
+# Connect to AWS IoT
 try:
     client.connect(ENDPOINT, 8883, keepalive=60)
 except Exception as e:
-    print("❌ MQTT initial connect failed:", e)
-    sys.exit(1)
+    print("❌ Initial MQTT connect failed:", e)
 
 client.loop_start()
 
 # ================= DATABASE =================
-conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-cursor = conn.cursor()
-
-# ================= PUBLISH FUNCTION WITH RETRY =================
-def publish_payload(payload):
-    for attempt in range(3):  # retry up to 3 times
-        try:
-            info = client.publish(TOPIC, json.dumps(payload), qos=1)
-            info.wait_for_publish()
-            if info.rc == mqtt.MQTT_ERR_SUCCESS:
-                return True
-        except Exception as e:
-            print(f"❌ MQTT publish attempt {attempt+1} failed:", e)
-        time.sleep(2)
-    return False
+try:
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    cursor = conn.cursor()
+except Exception as e:
+    print("❌ DB connection failed:", e)
+    sys.exit(1)
 
 # ================= MAIN LOOP =================
-try:
-    while RUNNING:
+while RUNNING:
+    try:
         cursor.execute("""
-            SELECT id, bp_pressure, fp_pressure, cr_pressure, bc_pressure, created_at
+            SELECT id,
+                   bp_pressure,
+                   fp_pressure,
+                   cr_pressure,
+                   bc_pressure,
+                   created_at
             FROM brake_pressure_log
             WHERE uploaded = 0
             ORDER BY id ASC
@@ -103,11 +103,11 @@ try:
         row = cursor.fetchone()
 
         if not row:
-            # No data to send, sleep longer to save memory
-            time.sleep(5)
+            time.sleep(2)
             continue
 
         id_, bp, fp, cr, bc, created_at = row
+
         payload = {
             "id": id_,
             "bp": bp,
@@ -117,24 +117,45 @@ try:
             "timestamp": created_at
         }
 
-        if publish_payload(payload):
-            cursor.execute("UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?", (id_,))
-            conn.commit()
-            print(f"✅ Uploaded | id={id_} timestamp=\"{created_at}\"")
-            print(f"📤 AWS IoT sent: {{ id:{id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp:{created_at} }}")
-        else:
-            print(f"❌ Failed to publish id={id_}, will retry later")
+        try:
+            info = client.publish(TOPIC, json.dumps(payload), qos=1)
+            info.wait_for_publish()
 
-        # Sleep 2 sec to reduce CPU/memory pressure
+            if info.rc == mqtt.MQTT_ERR_SUCCESS:
+                cursor.execute(
+                    "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
+                    (id_,)
+                )
+                conn.commit()
+                print(f'✅ Uploaded | id={id_} timestamp="{created_at}"')
+                print(
+                    f'📤 AWS IoT sent data: {{ id: {id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp: {created_at} }}'
+                )
+            else:
+                print("❌ Publish failed, RC:", info.rc)
+
+        except Exception as e:
+            print("❌ Error publishing MQTT:", e)
+
+        # Slight delay to reduce CPU/memory load
+        time.sleep(1)
+
+    except Exception as e:
+        print("❌ Main loop error:", e)
         time.sleep(2)
 
-except KeyboardInterrupt:
-    print("🛑 Graceful shutdown (KeyboardInterrupt)")
-
-finally:
-    print("🔻 CLEANING UP RESOURCES...")
+# ================= CLEANUP =================
+print("🔻 CLEANING UP RESOURCES...")
+try:
     client.loop_stop()
     client.disconnect()
+except Exception as e:
+    print("❌ MQTT cleanup error:", e)
+
+try:
     conn.close()
-    print("✅ Shutdown complete")
-    sys.exit(0)
+except Exception as e:
+    print("❌ DB close error:", e)
+
+print("✅ Shutdown complete")
+sys.exit(0)
