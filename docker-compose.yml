@@ -15,6 +15,6 @@ services:
       - BLINKA_FORCECHIP=BCM2712
       - BLINKA_USE_RPI_GPIO=1
       - PYTHONUNBUFFERED=1
-    restart: always
+    restart: unless-stopped
     stdin_open: true
     tty: true
