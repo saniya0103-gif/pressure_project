@@ -7,6 +7,7 @@ services:
     volumes:
       - ./db:/app/db
       - ./raspi:/app/raspi:ro
+      - ./system_upload.py:/app/system_upload.py
     environment:
       - BLINKA_FORCEBOARD=RASPBERRY_PI_5
       - BLINKA_FORCECHIP=BCM2712
