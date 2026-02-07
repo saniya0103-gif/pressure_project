@@ -3,15 +3,12 @@ import json
 import time
 import ssl
 import sqlite3
+import signal
+import sys
 import paho.mqtt.client as mqtt
 
-# ================= PATH CONFIG (FINAL FIX) =================
-# Docker will set APP_BASE_PATH=/app
-# Local run will use the default path
-BASE_PATH = os.getenv(
-    "APP_BASE_PATH",
-    "/home/pi_123/data/src/pressure_project"
-)
+# ================= PATH CONFIG =================
+BASE_PATH = os.getenv("APP_BASE_PATH", "/app")
 
 DB_PATH = f"{BASE_PATH}/db/project.db"
 RASPI_PATH = f"{BASE_PATH}/raspi"
@@ -24,7 +21,18 @@ ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 CLIENT_ID = "Raspberry_pi"
 TOPIC = "brake/pressure"
 
-# ================= DEBUG CHECK =================
+RUNNING = True
+
+# ================= SIGNAL HANDLER =================
+def shutdown_handler(sig, frame):
+    global RUNNING
+    print("🛑 Shutdown signal received")
+    RUNNING = False
+
+signal.signal(signal.SIGTERM, shutdown_handler)
+signal.signal(signal.SIGINT, shutdown_handler)
+
+# ================= DEBUG =================
 print("=== DEBUG START ===")
 print("BASE_PATH:", BASE_PATH)
 print("DB exists:", os.path.exists(DB_PATH))
@@ -40,9 +48,8 @@ def on_connect(client, userdata, flags, rc):
     else:
         print("❌ MQTT connect failed, RC:", rc)
 
-client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
+client = mqtt.Client(client_id=CLIENT_ID)
 client.on_connect = on_connect
-
 client.tls_set(
     ca_certs=CA_FILE,
     certfile=CERT_FILE,
@@ -54,11 +61,13 @@ client.connect(ENDPOINT, 8883)
 client.loop_start()
 
 # ================= DATABASE =================
-conn = sqlite3.connect(DB_PATH)
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = conn.cursor()
 
+print("🚀 Uploader running...")
+
 try:
-    while True:
+    while RUNNING:
         cursor.execute("""
             SELECT id,
                    bp_pressure,
@@ -74,7 +83,7 @@ try:
         row = cursor.fetchone()
 
         if not row:
-            time.sleep(2)
+            time.sleep(5)  # ⬅ prevents CPU abuse
             continue
 
         id_, bp, fp, cr, bc, created_at = row
@@ -97,19 +106,15 @@ try:
             )
             conn.commit()
 
-            print(f'✅ Uploaded & marked | id={id_} timestamp="{created_at}"')
-            print(
-                f"   AWS IoT sent: id={id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp:{created_at}"
-            )
+            print(f'✅ Uploaded | id={id_} timestamp="{created_at}"')
         else:
             print("❌ Publish failed, RC:", result.rc)
 
-        time.sleep(1)
-
-except KeyboardInterrupt:
-    print("🛑 Graceful shutdown")
+        time.sleep(2)
 
 finally:
+    print("🔻 Cleaning up...")
     client.loop_stop()
     client.disconnect()
     conn.close()
+    sys.exit(0)
