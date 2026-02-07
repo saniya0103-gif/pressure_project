@@ -1,10 +1,10 @@
 import os
 import json
+import time
 import ssl
-import sqlite3
 import signal
 import sys
-import threading
+import sqlite3
 import paho.mqtt.client as mqtt
 
 # ================= PATH CONFIG =================
@@ -20,12 +20,13 @@ ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 CLIENT_ID = "Raspberry_pi"
 TOPIC = "brake/pressure"
 
-# ================= STOP EVENT =================
-STOP_EVENT = threading.Event()
+RUNNING = True
 
+# ================= SIGNAL HANDLING =================
 def shutdown_handler(signum, frame):
+    global RUNNING
     print("🛑 Shutdown signal received")
-    STOP_EVENT.set()
+    RUNNING = False
 
 signal.signal(signal.SIGTERM, shutdown_handler)
 signal.signal(signal.SIGINT, shutdown_handler)
@@ -47,11 +48,10 @@ def on_connect(client, userdata, flags, rc):
         print("❌ MQTT connect failed, RC:", rc)
 
 def on_disconnect(client, userdata, rc):
-    if rc != 0:
+    if RUNNING:  # Only log disconnects during normal operation
         print(f"⚠️ Unexpected MQTT disconnect, RC: {rc}")
-    else:
-        print("⚠️ MQTT disconnected gracefully")
 
+# Use MQTT v3.1.1 and enable auto-reconnect
 client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
 client.on_connect = on_connect
 client.on_disconnect = on_disconnect
@@ -64,7 +64,7 @@ client.tls_set(
     tls_version=ssl.PROTOCOL_TLSv1_2
 )
 
-# Enable automatic reconnect with backoff
+# Auto-reconnect settings
 client.reconnect_delay_set(min_delay=1, max_delay=60)
 
 # Connect and start loop
@@ -77,14 +77,9 @@ cursor = conn.cursor()
 
 # ================= MAIN LOOP =================
 try:
-    while not STOP_EVENT.is_set():
+    while RUNNING:
         cursor.execute("""
-            SELECT id,
-                   bp_pressure,
-                   fp_pressure,
-                   cr_pressure,
-                   bc_pressure,
-                   created_at
+            SELECT id, bp_pressure, fp_pressure, cr_pressure, bc_pressure, created_at
             FROM brake_pressure_log
             WHERE uploaded = 0
             ORDER BY id ASC
@@ -92,38 +87,36 @@ try:
         """)
         row = cursor.fetchone()
 
-        if row:
-            id_, bp, fp, cr, bc, created_at = row
+        if not row:
+            time.sleep(1)
+            continue
 
-            payload = {
-                "id": id_,
-                "bp": bp,
-                "fp": fp,
-                "cr": cr,
-                "bc": bc,
-                "timestamp": created_at
-            }
+        id_, bp, fp, cr, bc, created_at = row
+        payload = {
+            "id": id_,
+            "bp": bp,
+            "fp": fp,
+            "cr": cr,
+            "bc": bc,
+            "timestamp": created_at
+        }
 
-            try:
-                info = client.publish(TOPIC, json.dumps(payload), qos=1)
-                info.wait_for_publish()  # wait until message is sent
+        try:
+            info = client.publish(TOPIC, json.dumps(payload), qos=1)
+            info.wait_for_publish()  # Ensure message is sent before proceeding
 
-                if info.rc == mqtt.MQTT_ERR_SUCCESS:
-                    cursor.execute(
-                        "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
-                        (id_,)
-                    )
-                    conn.commit()
-                    print(f'✅ Uploaded | id={id_} timestamp="{created_at}"')
-                    print(f'📤 AWS IoT sent: {{ id:{id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp:{created_at} }}')
-                else:
-                    print("❌ Publish failed, RC:", info.rc)
+            if info.rc == mqtt.MQTT_ERR_SUCCESS:
+                cursor.execute("UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?", (id_,))
+                conn.commit()
+                print(f"✅ Uploaded | id={id_} timestamp=\"{created_at}\"")
+                print(f"📤 AWS IoT sent: {{ id:{id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp:{created_at} }}")
+            else:
+                print("❌ Publish failed, RC:", info.rc)
 
-            except Exception as e:
-                print("❌ Error publishing to MQTT:", e)
+        except Exception as e:
+            print("❌ Error publishing to MQTT:", e)
 
-        # Wait a short interval, interruptible immediately
-        STOP_EVENT.wait(0.1)
+        time.sleep(0.5)
 
 finally:
     print("🔻 CLEANING UP RESOURCES...")
