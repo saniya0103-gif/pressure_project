@@ -3,6 +3,7 @@ import json
 import time
 import ssl
 import signal
+import sys
 import sqlite3
 import paho.mqtt.client as mqtt
 
@@ -48,13 +49,14 @@ def on_connect(client, userdata, flags, rc):
         print("❌ MQTT connect failed, RC:", rc)
 
 def on_disconnect(client, userdata, rc):
-    print("⚠️ MQTT disconnected, RC:", rc)
+    print(f"⚠️ MQTT disconnected, RC: {rc}")
+    # Will auto-reconnect because we enable reconnect_delay_set
 
 client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
 client.on_connect = on_connect
 client.on_disconnect = on_disconnect
 
-# TLS/SSL configuration
+# TLS setup
 client.tls_set(
     ca_certs=CA_FILE,
     certfile=CERT_FILE,
@@ -62,20 +64,27 @@ client.tls_set(
     tls_version=ssl.PROTOCOL_TLSv1_2
 )
 
-# Auto-reconnect settings
-client.reconnect_delay_set(min_delay=1, max_delay=30)
-client.connect(ENDPOINT, 8883)
+# Auto-reconnect
+client.reconnect_delay_set(min_delay=1, max_delay=120)
+
+# Connect to AWS IoT
+client.connect(ENDPOINT, 8883, keepalive=60)
 client.loop_start()
 
 # ================= DATABASE =================
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = conn.cursor()
 
+# ================= MAIN LOOP =================
 try:
     while RUNNING:
-        # Fetch the first unuploaded row
         cursor.execute("""
-            SELECT id, bp_pressure, fp_pressure, cr_pressure, bc_pressure, created_at
+            SELECT id,
+                   bp_pressure,
+                   fp_pressure,
+                   cr_pressure,
+                   bc_pressure,
+                   created_at
             FROM brake_pressure_log
             WHERE uploaded = 0
             ORDER BY id ASC
@@ -84,7 +93,7 @@ try:
         row = cursor.fetchone()
 
         if not row:
-            time.sleep(5)  # idle if no data
+            time.sleep(2)
             continue
 
         id_, bp, fp, cr, bc, created_at = row
@@ -98,22 +107,28 @@ try:
             "timestamp": created_at
         }
 
-        # Publish to AWS IoT
-        info = client.publish(TOPIC, json.dumps(payload), qos=1)
-        info.wait_for_publish()
+        try:
+            info = client.publish(TOPIC, json.dumps(payload), qos=1)
+            info.wait_for_publish()
 
-        if info.rc == mqtt.MQTT_ERR_SUCCESS:
-            cursor.execute("UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?", (id_,))
-            conn.commit()
-            print(f"✅ Uploaded | id={id_} timestamp=\"{created_at}\"")
-            print(f"📤 AWS IoT sent data:\n   {{ id:{id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp:{created_at} }}")
-        else:
-            print("❌ Publish failed, RC:", info.rc)
+            if info.rc == mqtt.MQTT_ERR_SUCCESS:
+                cursor.execute(
+                    "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
+                    (id_,)
+                )
+                conn.commit()
+                print(f'✅ Uploaded | id={id_} timestamp="{created_at}"')
+                print(
+                    f'📤 AWS IoT sent data:\n'
+                    f'   {{ id: {id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp: {created_at} }}'
+                )
+            else:
+                print("❌ Publish failed, RC:", info.rc)
+
+        except Exception as e:
+            print("❌ Error publishing to MQTT:", e)
 
         time.sleep(1)
-
-except Exception as e:
-    print("❌ Runtime error:", e)
 
 finally:
     print("🔻 CLEANING UP RESOURCES...")
@@ -121,3 +136,4 @@ finally:
     client.disconnect()
     conn.close()
     print("✅ Shutdown complete")
+    sys.exit(0)
