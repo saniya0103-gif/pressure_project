@@ -9,7 +9,6 @@ import paho.mqtt.client as mqtt
 
 # ================= PATH CONFIG =================
 BASE_PATH = os.getenv("APP_BASE_PATH", "/home/pi_123/data/src/pressure_project")
-
 DB_PATH = f"{BASE_PATH}/db/project.db"
 RASPI_PATH = f"{BASE_PATH}/raspi"
 
@@ -32,7 +31,7 @@ def shutdown_handler(signum, frame):
 signal.signal(signal.SIGTERM, shutdown_handler)
 signal.signal(signal.SIGINT, shutdown_handler)
 
-# ================= DEBUG =================
+# ================= DEBUG FILE CHECK =================
 print("=== DEBUG START ===")
 print("BASE_PATH:", BASE_PATH)
 print("DB exists:", os.path.exists(DB_PATH))
@@ -50,7 +49,6 @@ def on_connect(client, userdata, flags, rc):
 
 def on_disconnect(client, userdata, rc):
     print(f"⚠️ MQTT disconnected, RC: {rc}")
-    # Will auto-reconnect because we enable reconnect_delay_set
 
 client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
 client.on_connect = on_connect
@@ -64,10 +62,10 @@ client.tls_set(
     tls_version=ssl.PROTOCOL_TLSv1_2
 )
 
-# Auto-reconnect
+# Auto-reconnect settings
 client.reconnect_delay_set(min_delay=1, max_delay=120)
 
-# Connect to AWS IoT
+# Connect
 client.connect(ENDPOINT, 8883, keepalive=60)
 client.loop_start()
 
@@ -79,12 +77,7 @@ cursor = conn.cursor()
 try:
     while RUNNING:
         cursor.execute("""
-            SELECT id,
-                   bp_pressure,
-                   fp_pressure,
-                   cr_pressure,
-                   bc_pressure,
-                   created_at
+            SELECT id, bp_pressure, fp_pressure, cr_pressure, bc_pressure, created_at
             FROM brake_pressure_log
             WHERE uploaded = 0
             ORDER BY id ASC
@@ -93,7 +86,7 @@ try:
         row = cursor.fetchone()
 
         if not row:
-            time.sleep(2)
+            time.sleep(2)  # reduce CPU usage
             continue
 
         id_, bp, fp, cr, bc, created_at = row
@@ -112,21 +105,15 @@ try:
             info.wait_for_publish()
 
             if info.rc == mqtt.MQTT_ERR_SUCCESS:
-                cursor.execute(
-                    "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
-                    (id_,)
-                )
+                cursor.execute("UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?", (id_,))
                 conn.commit()
                 print(f'✅ Uploaded | id={id_} timestamp="{created_at}"')
-                print(
-                    f'📤 AWS IoT sent data:\n'
-                    f'   {{ id: {id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp: {created_at} }}'
-                )
+                print(f'📤 AWS IoT sent data: {{ id:{id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp:{created_at} }}')
             else:
                 print("❌ Publish failed, RC:", info.rc)
 
         except Exception as e:
-            print("❌ Error publishing to MQTT:", e)
+            print("❌ MQTT publish error:", e)
 
         time.sleep(1)
 
