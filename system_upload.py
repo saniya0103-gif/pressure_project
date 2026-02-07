@@ -48,12 +48,10 @@ def on_connect(client, userdata, flags, rc):
         print("❌ MQTT connect failed, RC:", rc)
 
 def on_disconnect(client, userdata, rc):
-    if rc != 0:
-        print(f"⚠️ Unexpected MQTT disconnect, RC: {rc}, retrying in 5s...")
-        time.sleep(5)  # delay before reconnect
-    else:
-        print("⚠️ MQTT disconnected gracefully")
+    if RUNNING:  # Only log disconnects during normal operation
+        print(f"⚠️ Unexpected MQTT disconnect, RC: {rc}")
 
+# Use MQTT v3.1.1 and enable auto-reconnect
 client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
 client.on_connect = on_connect
 client.on_disconnect = on_disconnect
@@ -66,27 +64,20 @@ client.tls_set(
     tls_version=ssl.PROTOCOL_TLSv1_2
 )
 
-# Auto-reconnect delays
-client.reconnect_delay_set(min_delay=5, max_delay=60)
+# Auto-reconnect settings
+client.reconnect_delay_set(min_delay=1, max_delay=60)
+
+# Connect and start loop
+client.connect(ENDPOINT, 8883, keepalive=60)
+client.loop_start()
 
 # ================= DATABASE =================
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = conn.cursor()
 
-# ================= CONNECT =================
-try:
-    client.connect(ENDPOINT, 8883, keepalive=60)
-
-except Exception as e:
-    print("❌ MQTT initial connect failed:", e)
-    sys.exit(1)
-
 # ================= MAIN LOOP =================
 try:
     while RUNNING:
-        # handle network events
-        client.loop(timeout=1.0)
-
         cursor.execute("""
             SELECT id, bp_pressure, fp_pressure, cr_pressure, bc_pressure, created_at
             FROM brake_pressure_log
@@ -97,11 +88,10 @@ try:
         row = cursor.fetchone()
 
         if not row:
-            time.sleep(2)
+            time.sleep(1)
             continue
 
         id_, bp, fp, cr, bc, created_at = row
-
         payload = {
             "id": id_,
             "bp": bp,
@@ -113,28 +103,24 @@ try:
 
         try:
             info = client.publish(TOPIC, json.dumps(payload), qos=1)
-            info.wait_for_publish()
+            info.wait_for_publish()  # Ensure message is sent before proceeding
 
             if info.rc == mqtt.MQTT_ERR_SUCCESS:
-                cursor.execute(
-                    "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
-                    (id_,)
-                )
+                cursor.execute("UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?", (id_,))
                 conn.commit()
-                print(f'✅ Uploaded | id={id_} timestamp="{created_at}"')
-                print(
-                    f'📤 AWS IoT sent: {{ id:{id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp:{created_at} }}'
-                )
+                print(f"✅ Uploaded | id={id_} timestamp=\"{created_at}\"")
+                print(f"📤 AWS IoT sent: {{ id:{id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp:{created_at} }}")
             else:
                 print("❌ Publish failed, RC:", info.rc)
 
         except Exception as e:
             print("❌ Error publishing to MQTT:", e)
 
-        time.sleep(1)
+        time.sleep(0.5)
 
 finally:
     print("🔻 CLEANING UP RESOURCES...")
+    client.loop_stop()
     client.disconnect()
     conn.close()
     print("✅ Shutdown complete")
