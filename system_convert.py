@@ -8,7 +8,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 
 # ---------------- DYNAMIC PATHS ----------------
 BASE_PATH = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "db", "project.db")
+DB_PATH = os.path.join(BASE_DIR, "db", "project.db") 
 DB_PATH   = os.path.join(DB_FOLDER, "project.db")
 
 print(f"Database folder: {DB_FOLDER}", flush=True)
