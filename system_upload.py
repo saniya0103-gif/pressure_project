@@ -31,7 +31,7 @@ def shutdown_handler(signum, frame):
 signal.signal(signal.SIGTERM, shutdown_handler)
 signal.signal(signal.SIGINT, shutdown_handler)
 
-# ================= DEBUG =================
+# ================= DEBUG FILE CHECK =================
 print("=== DEBUG START ===")
 print("BASE_PATH:", BASE_PATH)
 print("DB exists:", os.path.exists(DB_PATH))
@@ -48,10 +48,8 @@ def on_connect(client, userdata, flags, rc):
         print("❌ MQTT connect failed, RC:", rc)
 
 def on_disconnect(client, userdata, rc):
-    if RUNNING:  # Only log disconnects during normal operation
-        print(f"⚠️ Unexpected MQTT disconnect, RC: {rc}")
+    print(f"⚠️ MQTT disconnected, RC: {rc}")
 
-# Use MQTT v3.1.1 and enable auto-reconnect
 client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
 client.on_connect = on_connect
 client.on_disconnect = on_disconnect
@@ -65,9 +63,9 @@ client.tls_set(
 )
 
 # Auto-reconnect settings
-client.reconnect_delay_set(min_delay=1, max_delay=60)
+client.reconnect_delay_set(min_delay=1, max_delay=120)
 
-# Connect and start loop
+# Connect
 client.connect(ENDPOINT, 8883, keepalive=60)
 client.loop_start()
 
@@ -88,10 +86,11 @@ try:
         row = cursor.fetchone()
 
         if not row:
-            time.sleep(1)
+            time.sleep(2)  # reduce CPU usage
             continue
 
         id_, bp, fp, cr, bc, created_at = row
+
         payload = {
             "id": id_,
             "bp": bp,
@@ -103,20 +102,20 @@ try:
 
         try:
             info = client.publish(TOPIC, json.dumps(payload), qos=1)
-            info.wait_for_publish()  # Ensure message is sent before proceeding
+            info.wait_for_publish()
 
             if info.rc == mqtt.MQTT_ERR_SUCCESS:
                 cursor.execute("UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?", (id_,))
                 conn.commit()
-                print(f"✅ Uploaded | id={id_} timestamp=\"{created_at}\"")
-                print(f"📤 AWS IoT sent: {{ id:{id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp:{created_at} }}")
+                print(f'✅ Uploaded | id={id_} timestamp="{created_at}"')
+                print(f'📤 AWS IoT sent data: {{ id:{id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp:{created_at} }}')
             else:
                 print("❌ Publish failed, RC:", info.rc)
 
         except Exception as e:
-            print("❌ Error publishing to MQTT:", e)
+            print("❌ MQTT publish error:", e)
 
-        time.sleep(0.5)
+        time.sleep(1)
 
 finally:
     print("🔻 CLEANING UP RESOURCES...")
