@@ -1,68 +1,64 @@
+import os
 import json
 import time
 import ssl
+import signal
+import sys
 import sqlite3
-from datetime import datetime
 import paho.mqtt.client as mqtt
 
-# ---------------- CONFIG ----------------
-AWS_ENDPOINT = "xxxxxxxxxxxxx-ats.iot.ap-south-1.amazonaws.com"
-PORT = 8883
-TOPIC = "pressure/data"
+# ================= PATH CONFIG =================
+BASE_PATH = "/home/pi_123/data/src/pressure_project"
+DB_PATH = f"{BASE_PATH}/db/project.db"
+RASPI_PATH = f"{BASE_PATH}/raspi"
 
+CA_PATH   = f"{RASPI_PATH}/AmazonRootCA1.pem"
+CERT_PATH = f"{RASPI_PATH}/3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-certificate.pem.crt"
+KEY_PATH  = f"{RASPI_PATH}/3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-private.pem.key"
+
+ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 CLIENT_ID = "Raspberry_pi"
+TOPIC = "brake/pressure"
 
-CA_PATH   = "certs/AmazonRootCA1.pem"
-CERT_PATH = "certs/device.pem.crt"
-KEY_PATH  = "certs/private.pem.key"
+RUNNING = True
+CONNECTED = False
 
-DB_PATH = "data/pressure.db"
+# ================= SIGNAL HANDLING =================
+def shutdown_handler(signum, frame):
+    global RUNNING
+    print("🛑 Shutdown signal received")
+    RUNNING = False
 
-# ----------------------------------------
+signal.signal(signal.SIGTERM, shutdown_handler)
+signal.signal(signal.SIGINT, shutdown_handler)
 
-def get_pending_row():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
+# ================= FILE CHECK =================
+print("=== DEBUG START ===")
+print("DB exists:", os.path.exists(DB_PATH))
+print("CA exists:", os.path.exists(CA_PATH))
+print("CERT exists:", os.path.exists(CERT_PATH))
+print("KEY exists:", os.path.exists(KEY_PATH))
+print("=== DEBUG END ===")
 
-    cur.execute("""
-        SELECT id, created_at, bp, bc, cr, fp
-        FROM pressure_log
-        WHERE uploaded = 0
-        ORDER BY id ASC
-        LIMIT 1
-    """)
+for f in [DB_PATH, CA_PATH, CERT_PATH, KEY_PATH]:
+    if not os.path.exists(f):
+        raise FileNotFoundError(f"❌ Missing file: {f}")
 
-    row = cur.fetchone()
-    conn.close()
-    return row
-
-
-def mark_uploaded(row_id):
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("UPDATE pressure_log SET uploaded = 1 WHERE id = ?", (row_id,))
-    conn.commit()
-    conn.close()
-
-
-# ---------------- MQTT CALLBACKS ----------------
+# ================= MQTT CALLBACKS =================
 def on_connect(client, userdata, flags, rc):
+    global CONNECTED
     if rc == 0:
-        print("✅ AWS IoT Connected")
+        CONNECTED = True
+        print("✅ Connected to AWS IoT Core")
     else:
-        print(f"❌ Connection failed rc={rc}")
-
+        print("❌ MQTT connection failed, rc =", rc)
 
 def on_disconnect(client, userdata, rc):
-    print("⚠️ MQTT Disconnected, reconnecting...")
-    time.sleep(5)
-    try:
-        client.reconnect()
-    except Exception as e:
-        print("Reconnect failed:", e)
+    global CONNECTED
+    CONNECTED = False
+    print("⚠️ MQTT disconnected, rc =", rc)
 
-
-# ---------------- MQTT SETUP ----------------
+# ================= MQTT CLIENT =================
 client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
 client.on_connect = on_connect
 client.on_disconnect = on_disconnect
@@ -74,40 +70,72 @@ client.tls_set(
     tls_version=ssl.PROTOCOL_TLSv1_2
 )
 
-client.connect(AWS_ENDPOINT, PORT)
+client.reconnect_delay_set(min_delay=1, max_delay=60)
+
+client.connect_async(ENDPOINT, 8883, keepalive=60)
 client.loop_start()
 
-# ---------------- MAIN LOOP ----------------
-while True:
-    try:
-        row = get_pending_row()
+# ================= DATABASE =================
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+cursor = conn.cursor()
+
+# ================= MAIN LOOP =================
+try:
+    while RUNNING:
+        if not CONNECTED:
+            time.sleep(2)
+            continue
+
+        cursor.execute("""
+            SELECT id, bp_pressure, fp_pressure, cr_pressure, bc_pressure, created_at
+            FROM brake_pressure_log
+            WHERE uploaded = 0
+            ORDER BY id ASC
+            LIMIT 1
+        """)
+        row = cursor.fetchone()
 
         if not row:
             time.sleep(2)
             continue
 
-        row_id, ts, bp, bc, cr, fp = row
+        id_, bp, fp, cr, bc, created_at = row
 
         payload = {
-            "id": row_id,
-            "timestamp": ts,
+            "id": id_,
+            "timestamp": created_at,
             "bp": bp,
-            "bc": bc,
+            "fp": fp,
             "cr": cr,
-            "fp": fp
+            "bc": bc
         }
 
-        client.publish(TOPIC, json.dumps(payload), qos=1)
+        result = client.publish(TOPIC, json.dumps(payload), qos=1)
+        result.wait_for_publish()
 
-        print(
-            f"✅ Uploaded | id={row_id} timestamp={ts} "
-            f"bp={bp} bc={bc} cr={cr} fp={fp}"
-        )
-        print(f"📤 AWS IoT Sent: {json.dumps(payload)}")
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            cursor.execute(
+                "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
+                (id_,)
+            )
+            conn.commit()
 
-        mark_uploaded(row_id)
+            print(
+                f'✅ Uploaded | id={id_} timestamp="{created_at}" '
+                f'BP={bp} FP={fp} CR={cr} BC={bc}'
+            )
+            print(
+                f'📤 AWS IoT Sent {{ id={id_}, timestamp="{created_at}", '
+                f'bp={bp}, fp={fp}, cr={cr}, bc={bc} }}'
+            )
+        else:
+            print("❌ Publish failed, rc =", result.rc)
 
-    except Exception as e:
-        print("❌ Upload error:", e)
+        time.sleep(1)
 
-    time.sleep(1)
+finally:
+    print("🔻 Shutting down cleanly...")
+    client.loop_stop()
+    client.disconnect()
+    conn.close()
+    sys.exit(0)
