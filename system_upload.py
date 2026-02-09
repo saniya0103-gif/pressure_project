@@ -5,6 +5,7 @@ import ssl
 import signal
 import sys
 import sqlite3
+import socket
 import paho.mqtt.client as mqtt
 
 # ================= PATH CONFIG =================
@@ -31,7 +32,18 @@ def shutdown_handler(signum, frame):
 signal.signal(signal.SIGTERM, shutdown_handler)
 signal.signal(signal.SIGINT, shutdown_handler)
 
-# ================= DEBUG FILE CHECK =================
+# ================= INTERNET WAIT =================
+def wait_for_internet():
+    while True:
+        try:
+            socket.create_connection(("8.8.8.8", 53), timeout=5)
+            print("🌐 Internet ready")
+            return
+        except OSError:
+            print("⏳ Waiting for internet...")
+            time.sleep(5)
+
+# ================= DEBUG =================
 print("=== DEBUG START ===")
 print("BASE_PATH:", BASE_PATH)
 print("DB exists:", os.path.exists(DB_PATH))
@@ -40,21 +52,26 @@ print("CERT exists:", os.path.exists(CERT_FILE))
 print("KEY exists:", os.path.exists(KEY_FILE))
 print("=== DEBUG END ===")
 
-# ================= MQTT =================
-def on_connect(client, userdata, flags, rc):
-    if rc == 0:
+# ================= MQTT CALLBACKS =================
+def on_connect(client, userdata, flags, reason_code, properties=None):
+    if reason_code == 0:
         print("✅ Connected to AWS IoT Core")
     else:
-        print("❌ MQTT connect failed, RC:", rc)
+        print("❌ MQTT connect failed, RC:", reason_code)
 
-def on_disconnect(client, userdata, rc):
-    print(f"⚠️ MQTT disconnected, RC: {rc}")
+def on_disconnect(client, userdata, reason_code, properties=None):
+    print("⚠️ MQTT disconnected, RC:", reason_code)
 
-client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
+# ================= MQTT CLIENT =================
+client = mqtt.Client(
+    client_id=CLIENT_ID,
+    protocol=mqtt.MQTTv311,
+    callback_api_version=mqtt.CallbackAPIVersion.VERSION2
+)
+
 client.on_connect = on_connect
 client.on_disconnect = on_disconnect
 
-# TLS setup
 client.tls_set(
     ca_certs=CA_FILE,
     certfile=CERT_FILE,
@@ -62,11 +79,21 @@ client.tls_set(
     tls_version=ssl.PROTOCOL_TLSv1_2
 )
 
-# Auto-reconnect settings
-client.reconnect_delay_set(min_delay=1, max_delay=120)
+client.tls_insecure_set(False)
+client.reconnect_delay_set(min_delay=5, max_delay=60)
 
-# Connect
-client.connect(ENDPOINT, 8883, keepalive=60)
+# ================= CONNECT =================
+wait_for_internet()
+
+while True:
+    try:
+        print("🔌 Connecting to AWS IoT...")
+        client.connect(ENDPOINT, 8883, keepalive=60)
+        break
+    except Exception as e:
+        print("AWS IoT connect failed:", e)
+        time.sleep(10)
+
 client.loop_start()
 
 # ================= DATABASE =================
@@ -86,7 +113,7 @@ try:
         row = cursor.fetchone()
 
         if not row:
-            time.sleep(2)  # reduce CPU usage
+            time.sleep(2)
             continue
 
         id_, bp, fp, cr, bc, created_at = row
@@ -105,10 +132,12 @@ try:
             info.wait_for_publish()
 
             if info.rc == mqtt.MQTT_ERR_SUCCESS:
-                cursor.execute("UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?", (id_,))
+                cursor.execute(
+                    "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
+                    (id_,)
+                )
                 conn.commit()
-                print(f'✅ Uploaded | id={id_} timestamp="{created_at}"')
-                print(f'📤 AWS IoT sent data: {{ id:{id_} | BP:{bp} | FP:{fp} | CR:{cr} | BC:{bc} | timestamp:{created_at} }}')
+                print(f"✅ Uploaded | id={id_} time={created_at}")
             else:
                 print("❌ Publish failed, RC:", info.rc)
 
