@@ -12,12 +12,12 @@ BASE_PATH = "/home/pi_123/data/src/pressure_project"
 DB_PATH = f"{BASE_PATH}/db/project.db"
 RASPI_PATH = f"{BASE_PATH}/raspi"
 
-CA_PATH   = f"{RASPI_PATH}/AmazonRootCA1 (4).pem"
+CA_PATH = f"{RASPI_PATH}/AmazonRootCA1 (4).pem"
 CERT_PATH = f"{RASPI_PATH}/3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-certificate.pem.crt"
-KEY_PATH  = f"{RASPI_PATH}/3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-private.pem.key"
+KEY_PATH = f"{RASPI_PATH}/3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-private.pem.key"
 
 ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
-CLIENT_ID = "Raspberry_pi"
+CLIENT_ID = "raspi_pressure_01"
 TOPIC = "brake/pressure"
 
 RUNNING = True
@@ -26,8 +26,8 @@ CONNECTED = False
 # ================= SIGNAL HANDLING =================
 def shutdown_handler(signum, frame):
     global RUNNING
-    print("🛑 Shutdown signal received")
     RUNNING = False
+    print("🛑 Shutdown signal received")
 
 signal.signal(signal.SIGTERM, shutdown_handler)
 signal.signal(signal.SIGINT, shutdown_handler)
@@ -44,25 +44,25 @@ for f in [DB_PATH, CA_PATH, CERT_PATH, KEY_PATH]:
     if not os.path.exists(f):
         raise FileNotFoundError(f"❌ Missing file: {f}")
 
-# ================= MQTT CALLBACKS =================
-def on_connect(client, userdata, flags, rc):
+# ================= MQTT CALLBACKS (NEW API) =================
+def on_connect(client, userdata, flags, reason_code, properties=None):
     global CONNECTED
-    if rc == 0:
+    if reason_code == 0:
         CONNECTED = True
         print("✅ Connected to AWS IoT Core")
     else:
-        print("❌ MQTT connection failed, RC:", rc)
+        print("❌ MQTT connect failed, reason code:", reason_code)
 
-def on_disconnect(client, userdata, rc):
+def on_disconnect(client, userdata, reason_code, properties=None):
     global CONNECTED
     CONNECTED = False
-    print("⚠️ MQTT disconnected (rc =", rc, ")")
+    print("⚠️ MQTT disconnected, reason:", reason_code)
 
 # ================= MQTT CLIENT =================
 client = mqtt.Client(
     client_id=CLIENT_ID,
     protocol=mqtt.MQTTv311,
-    clean_session=True
+    callback_api_version=mqtt.CallbackAPIVersion.VERSION2
 )
 
 client.on_connect = on_connect
@@ -76,11 +76,11 @@ client.tls_set(
 )
 
 client.tls_insecure_set(False)
-client.reconnect_delay_set(min_delay=2, max_delay=60)
+client.reconnect_delay_set(min_delay=5, max_delay=60)
 
 # ================= CONNECT =================
 try:
-    client.connect(ENDPOINT, 8883, keepalive=60)
+    client.connect(ENDPOINT, port=8883, keepalive=60)
 except Exception as e:
     print("❌ Initial MQTT connect failed:", e)
     sys.exit(1)
@@ -131,15 +131,7 @@ try:
                 (id_,)
             )
             conn.commit()
-
-            print(
-                f'✅ Uploaded | id={id_} timestamp="{created_at}" '
-                f'BP={bp} FP={fp} CR={cr} BC={bc}'
-            )
-            print(
-                f'📤 AWS IoT Sent {{ timestamp="{created_at}", id={id_}, '
-                f'bp={bp}, fp={fp}, cr={cr}, bc={bc} }}'
-            )
+            print(f"✅ Uploaded | id={id_} BP={bp} FP={fp} CR={cr} BC={bc}")
         else:
             print("❌ Publish failed, rc =", result.rc)
 
