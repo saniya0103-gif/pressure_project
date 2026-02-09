@@ -12,9 +12,8 @@ BASE_PATH = "/home/pi_123/data/src/pressure_project"
 DB_PATH = f"{BASE_PATH}/db/project.db"
 RASPI_PATH = f"{BASE_PATH}/raspi"
 
-CA_PATH   = os.path.join(RASPI_PATH, "AmazonRootCA1 (4).pem")
-CERT_PATH = os.path.join(RASPI_PATH, "3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-certificate.pem.crt")
-KEY_PATH  = os.path.join(RASPI_PATH, "3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-private.pem.key")
+# Root CA only is needed for WebSockets
+CA_PATH = os.path.join(RASPI_PATH, "AmazonRootCA1 (4).pem")
 
 ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 TOPIC = "brake/pressure"
@@ -35,11 +34,9 @@ signal.signal(signal.SIGINT, shutdown_handler)
 print("=== DEBUG START ===")
 print("DB exists:", os.path.exists(DB_PATH))
 print("CA exists:", os.path.exists(CA_PATH))
-print("CERT exists:", os.path.exists(CERT_PATH))
-print("KEY exists:", os.path.exists(KEY_PATH))
 print("=== DEBUG END ===")
 
-for f in [DB_PATH, CA_PATH, CERT_PATH, KEY_PATH]:
+for f in [DB_PATH, CA_PATH]:
     if not os.path.exists(f):
         raise FileNotFoundError(f"❌ Missing file: {f}")
 
@@ -58,13 +55,11 @@ def on_disconnect(client, userdata, rc, properties=None):
     print("⚠️ MQTT disconnected, reason:", rc)
 
 # ================= MQTT CLIENT =================
-import time
-CLIENT_ID = f"Raspberry_pi_{int(time.time())}"  # Unique ID to avoid disconnects
+CLIENT_ID = f"Raspberry_pi_{int(time.time())}"  # Unique ID
 
 client = mqtt.Client(
     client_id=CLIENT_ID,
-    protocol=mqtt.MQTTv311,
-    clean_session=True
+    transport="websockets"  # ✅ Use WebSockets
 )
 
 client.on_connect = on_connect
@@ -72,8 +67,6 @@ client.on_disconnect = on_disconnect
 
 client.tls_set(
     ca_certs=CA_PATH,
-    certfile=CERT_PATH,
-    keyfile=KEY_PATH,
     tls_version=ssl.PROTOCOL_TLSv1_2
 )
 client.tls_insecure_set(False)
@@ -81,7 +74,7 @@ client.reconnect_delay_set(min_delay=2, max_delay=60)
 
 # ================= CONNECT =================
 try:
-    client.connect(ENDPOINT, 8883, keepalive=60)
+    client.connect(ENDPOINT, 443, keepalive=60)  # ✅ Port 443 for WebSockets
 except Exception as e:
     print("❌ Initial MQTT connect failed:", e)
     sys.exit(1)
