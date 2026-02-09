@@ -12,7 +12,7 @@ BASE_PATH = "/home/pi_123/data/src/pressure_project"
 DB_PATH = f"{BASE_PATH}/db/project.db"
 RASPI_PATH = f"{BASE_PATH}/raspi"
 
-CA_PATH   = f"{RASPI_PATH}/AmazonRootCA1.pem"
+CA_PATH   = f"{RASPI_PATH}/AmazonRootCA1 (4).pem"
 CERT_PATH = f"{RASPI_PATH}/3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-certificate.pem.crt"
 KEY_PATH  = f"{RASPI_PATH}/3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-private.pem.key"
 
@@ -51,15 +51,20 @@ def on_connect(client, userdata, flags, rc):
         CONNECTED = True
         print("✅ Connected to AWS IoT Core")
     else:
-        print("❌ MQTT connection failed, rc =", rc)
+        print("❌ MQTT connection failed, RC:", rc)
 
 def on_disconnect(client, userdata, rc):
     global CONNECTED
     CONNECTED = False
-    print("⚠️ MQTT disconnected, rc =", rc)
+    print("⚠️ MQTT disconnected (rc =", rc, ")")
 
 # ================= MQTT CLIENT =================
-client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
+client = mqtt.Client(
+    client_id=CLIENT_ID,
+    protocol=mqtt.MQTTv311,
+    clean_session=True
+)
+
 client.on_connect = on_connect
 client.on_disconnect = on_disconnect
 
@@ -70,9 +75,16 @@ client.tls_set(
     tls_version=ssl.PROTOCOL_TLSv1_2
 )
 
-client.reconnect_delay_set(min_delay=1, max_delay=60)
+client.tls_insecure_set(False)
+client.reconnect_delay_set(min_delay=2, max_delay=60)
 
-client.connect_async(ENDPOINT, 8883, keepalive=60)
+# ================= CONNECT =================
+try:
+    client.connect(ENDPOINT, 8883, keepalive=60)
+except Exception as e:
+    print("❌ Initial MQTT connect failed:", e)
+    sys.exit(1)
+
 client.loop_start()
 
 # ================= DATABASE =================
@@ -103,11 +115,11 @@ try:
 
         payload = {
             "id": id_,
-            "timestamp": created_at,
             "bp": bp,
             "fp": fp,
             "cr": cr,
-            "bc": bc
+            "bc": bc,
+            "timestamp": created_at
         }
 
         result = client.publish(TOPIC, json.dumps(payload), qos=1)
@@ -125,7 +137,7 @@ try:
                 f'BP={bp} FP={fp} CR={cr} BC={bc}'
             )
             print(
-                f'📤 AWS IoT Sent {{ id={id_}, timestamp="{created_at}", '
+                f'📤 AWS IoT Sent {{ timestamp="{created_at}", id={id_}, '
                 f'bp={bp}, fp={fp}, cr={cr}, bc={bc} }}'
             )
         else:
@@ -138,4 +150,4 @@ finally:
     client.loop_stop()
     client.disconnect()
     conn.close()
-    sys.exit(0)
+    print("✅ Shutdown complete")
