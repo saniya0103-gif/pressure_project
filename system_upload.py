@@ -58,12 +58,13 @@ def on_disconnect(client, userdata, rc, properties=None):
     print("⚠️ MQTT disconnected, reason:", rc)
 
 # ================= MQTT CLIENT =================
-CLIENT_ID = f"Raspberry_pi_{int(time.time())}"  # Unique client ID to avoid disconnects
-client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311, clean_session=True)
+CLIENT_ID = f"Raspberry_pi_{int(time.time())}"  # Unique client ID
+client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
 
 client.on_connect = on_connect
 client.on_disconnect = on_disconnect
 
+# TLS / SSL setup (AWS IoT compatible)
 client.tls_set(
     ca_certs=CA_PATH,
     certfile=CERT_PATH,
@@ -117,8 +118,12 @@ try:
             "timestamp": str(created_at)
         }
 
-        result = client.publish(TOPIC, json.dumps(payload), qos=1)
-        result.wait_for_publish()
+        try:
+            result = client.publish(TOPIC, json.dumps(payload), qos=1)
+            result.wait_for_publish()
+        except Exception as e:
+            print("❌ Publish exception:", e)
+            continue
 
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
             cursor.execute(
@@ -127,7 +132,6 @@ try:
             )
             conn.commit()
             print(f'✅ Uploaded | id={id_} BP={bp} FP={fp} CR={cr} BC={bc} timestamp="{created_at}"')
-            print(f'📤 AWS IoT Sent {{ id={id_} BP={bp} FP={fp} CR={cr} BC={bc} timestamp="{created_at}" }}')
         else:
             print("❌ Publish failed, rc =", result.rc)
 
