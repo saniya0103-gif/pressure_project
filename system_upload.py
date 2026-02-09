@@ -5,6 +5,7 @@ import ssl
 import signal
 import sys
 import sqlite3
+import socket
 import paho.mqtt.client as mqtt
 
 # ================= PATH CONFIG =================
@@ -12,9 +13,9 @@ BASE_PATH = "/home/pi_123/data/src/pressure_project"
 DB_PATH = os.path.join(BASE_PATH, "db/project.db")
 RASPI_PATH = os.path.join(BASE_PATH, "raspi")
 
-CA_PATH   = os.path.join(RASPI_PATH, "AmazonRootCA1 (4).pem")
+CA_PATH = os.path.join(RASPI_PATH, "AmazonRootCA1 (4).pem")
 CERT_PATH = os.path.join(RASPI_PATH, "3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-certificate.pem.crt")
-KEY_PATH  = os.path.join(RASPI_PATH, "3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-private.pem.key")
+KEY_PATH = os.path.join(RASPI_PATH, "3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-private.pem.key")
 
 ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
 TOPIC = "brake/pressure"
@@ -43,6 +44,19 @@ for f in [DB_PATH, CA_PATH, CERT_PATH, KEY_PATH]:
     if not os.path.exists(f):
         raise FileNotFoundError(f"❌ Missing file: {f}")
 
+# ================= NETWORK CHECK =================
+def wait_for_network(host="8.8.8.8", port=53, timeout=3):
+    while True:
+        try:
+            socket.setdefaulttimeout(timeout)
+            socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+            return True
+        except Exception:
+            print("⚠️ Network not ready, waiting 5s...")
+            time.sleep(5)
+
+wait_for_network()
+
 # ================= MQTT CALLBACKS =================
 def on_connect(client, userdata, flags, rc, properties=None):
     global CONNECTED
@@ -58,13 +72,12 @@ def on_disconnect(client, userdata, rc, properties=None):
     print("⚠️ MQTT disconnected, reason:", rc)
 
 # ================= MQTT CLIENT =================
-CLIENT_ID = f"Raspberry_pi_{int(time.time())}"  # Unique client ID
-client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
+CLIENT_ID = f"Raspberry_pi_{int(time.time())}"
 
+client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
 client.on_connect = on_connect
 client.on_disconnect = on_disconnect
 
-# TLS / SSL setup (AWS IoT compatible)
 client.tls_set(
     ca_certs=CA_PATH,
     certfile=CERT_PATH,
@@ -75,13 +88,18 @@ client.tls_insecure_set(False)
 client.reconnect_delay_set(min_delay=2, max_delay=60)
 
 # ================= CONNECT =================
-try:
-    client.connect(ENDPOINT, 8883, keepalive=60)
-except Exception as e:
-    print("❌ Initial MQTT connect failed:", e)
-    #sys.exit(1)
+def connect_mqtt():
+    global client
+    while RUNNING and not CONNECTED:
+        try:
+            client.connect(ENDPOINT, 8883, keepalive=60)
+            client.loop_start()
+            time.sleep(2)  # wait for on_connect callback
+        except Exception as e:
+            print("❌ MQTT connect failed:", e)
+            time.sleep(5)
 
-client.loop_start()
+connect_mqtt()
 
 # ================= DATABASE =================
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -91,6 +109,8 @@ cursor = conn.cursor()
 try:
     while RUNNING:
         if not CONNECTED:
+            print("⚠️ Not connected to MQTT, retrying...")
+            connect_mqtt()
             time.sleep(2)
             continue
 
@@ -121,19 +141,16 @@ try:
         try:
             result = client.publish(TOPIC, json.dumps(payload), qos=1)
             result.wait_for_publish()
+            if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                cursor.execute("UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?", (id_,))
+                conn.commit()
+                print(f'✅ Uploaded | id={id_} BP={bp} FP={fp} CR={cr} BC={bc} timestamp="{created_at}"')
+                print(f'📤 AWS IoT Sent {payload}')
+            else:
+                print("❌ Publish failed, rc =", result.rc)
         except Exception as e:
-            print("❌ Publish exception:", e)
-            continue
-
-        if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            cursor.execute(
-                "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
-                (id_,)
-            )
-            conn.commit()
-            print(f'✅ Uploaded | id={id_} BP={bp} FP={fp} CR={cr} BC={bc} timestamp="{created_at}"')
-        else:
-            print("❌ Publish failed, rc =", result.rc)
+            print("❌ Error publishing:", e)
+            CONNECTED = False  # Force reconnect
 
         time.sleep(1)
 
