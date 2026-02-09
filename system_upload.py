@@ -12,12 +12,11 @@ BASE_PATH = "/home/pi_123/data/src/pressure_project"
 DB_PATH = f"{BASE_PATH}/db/project.db"
 RASPI_PATH = f"{BASE_PATH}/raspi"
 
-CA_PATH   = f"{RASPI_PATH}/AmazonRootCA1 (4).pem"
-CERT_PATH = f"{RASPI_PATH}/3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-certificate.pem.crt"
-KEY_PATH  = f"{RASPI_PATH}/3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-private.pem.key"
+CA_PATH   = os.path.join(RASPI_PATH, "AmazonRootCA1 (4).pem")
+CERT_PATH = os.path.join(RASPI_PATH, "3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-certificate.pem.crt")
+KEY_PATH  = os.path.join(RASPI_PATH, "3e866ef4c18b7534f9052110a7eb36cdede25434a3cc08e3df2305a14aba5175-private.pem.key")
 
 ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
-CLIENT_ID = "Raspberry_pi"
 TOPIC = "brake/pressure"
 
 RUNNING = True
@@ -59,6 +58,9 @@ def on_disconnect(client, userdata, rc, properties=None):
     print("⚠️ MQTT disconnected, reason:", rc)
 
 # ================= MQTT CLIENT =================
+import time
+CLIENT_ID = f"Raspberry_pi_{int(time.time())}"  # Unique ID to avoid disconnects
+
 client = mqtt.Client(
     client_id=CLIENT_ID,
     protocol=mqtt.MQTTv311,
@@ -74,7 +76,6 @@ client.tls_set(
     keyfile=KEY_PATH,
     tls_version=ssl.PROTOCOL_TLSv1_2
 )
-
 client.tls_insecure_set(False)
 client.reconnect_delay_set(min_delay=2, max_delay=60)
 
@@ -132,14 +133,11 @@ try:
             )
             conn.commit()
 
-            # ✅ Uploaded log
             print(
                 f'✅ Uploaded | id={id_} BP={bp} FP={fp} CR={cr} BC={bc} timestamp="{created_at}"'
             )
-
-            # 📤 AWS IoT Sent log
             print(
-                f'📤 AWS IoT Sent {{ id={id_}, bp={bp}, fp={fp}, cr={cr}, bc={bc}, timestamp="{created_at}" }}'
+                f'📤 AWS IoT Sent {{ id={id_} BP={bp} FP={fp} CR={cr} BC={bc} timestamp="{created_at}" }}'
             )
         else:
             print("❌ Publish failed, rc =", result.rc)
@@ -151,7 +149,7 @@ finally:
     try:
         client.loop_stop()
         client.disconnect()
-    except Exception as e:
-        print("⚠️ Error disconnecting MQTT:", e)
+    except Exception:
+        pass
     conn.close()
     print("✅ Shutdown complete")
