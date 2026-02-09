@@ -1,9 +1,9 @@
+#!/usr/bin/env python3
 import os
 import json
 import time
 import ssl
 import signal
-import sys
 import sqlite3
 import socket
 import paho.mqtt.client as mqtt
@@ -64,6 +64,7 @@ def on_connect(client, userdata, flags, rc, properties=None):
         CONNECTED = True
         print("✅ Connected to AWS IoT Core")
     else:
+        CONNECTED = False
         print("❌ MQTT connection failed, RC:", rc)
 
 def on_disconnect(client, userdata, rc, properties=None):
@@ -72,7 +73,7 @@ def on_disconnect(client, userdata, rc, properties=None):
     print("⚠️ MQTT disconnected, reason:", rc)
 
 # ================= MQTT CLIENT =================
-CLIENT_ID = f"Raspberry_pi_{int(time.time())}"
+CLIENT_ID = f"Raspberry_pi"
 
 client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311)
 client.on_connect = on_connect
@@ -94,7 +95,7 @@ def connect_mqtt():
         try:
             client.connect(ENDPOINT, 8883, keepalive=60)
             client.loop_start()
-            time.sleep(2)  # wait for on_connect callback
+            time.sleep(2)
         except Exception as e:
             print("❌ MQTT connect failed:", e)
             time.sleep(5)
