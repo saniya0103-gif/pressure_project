@@ -79,7 +79,7 @@ try:
     client.connect(ENDPOINT, 8883, keepalive=60)
 except Exception as e:
     print("❌ Initial MQTT connect failed:", e)
-    sys.exit(1)
+    #sys.exit(1)
 
 client.loop_start()
 
