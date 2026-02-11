@@ -3,19 +3,17 @@ import time
 import os
 import sys
 
-# ---------------- ENCODING SETUP ----------------
+# ---------------- ENCODING ----------------
 sys.stdout.reconfigure(encoding='utf-8')
 
-# ---------------- DYNAMIC PATHS ----------------
-BASE_PATH = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "db", "project.db") 
-DB_PATH   = os.path.join(DB_FOLDER, "project.db")
+# ---------------- PATH SETUP ----------------
+BASE_DIR = "/app" if os.path.exists("/app") else os.path.dirname(os.path.abspath(__file__))
+DB_FOLDER = os.path.join(BASE_DIR, "db")
+DB_PATH = os.path.join(DB_FOLDER, "project.db")
 
-print(f"Database folder: {DB_FOLDER}", flush=True)
-print(f"Database file: {DB_PATH}", flush=True)
-
-# Ensure DB folder exists
 os.makedirs(DB_FOLDER, exist_ok=True)
+
+print(f"Database file: {DB_PATH}", flush=True)
 
 # ---------------- DATABASE SETUP ----------------
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -44,22 +42,24 @@ try:
     import adafruit_ads1x15.ads1115 as ADS
     from adafruit_ads1x15.analog_in import AnalogIn
 
-    # Initialize I2C
     i2c = busio.I2C(board.SCL, board.SDA)
-
-    # Initialize ADS1115
     ads = ADS.ADS1115(i2c)
-    ads.gain = 1
+    ads.gain = 1   # ±4.096V
 
-    # ADS1115 Channels
     bp_channel = AnalogIn(ads, 0)
     fp_channel = AnalogIn(ads, 1)
     cr_channel = AnalogIn(ads, 2)
     bc_channel = AnalogIn(ads, 3)
 
 except Exception as e:
-    print("⚠️ ADS1115 sensor not found. Using dummy zeros.", flush=True)
+    print("⚠️ ADS1115 not detected. Using dummy values.", flush=True)
     ADS_AVAILABLE = False
+
+# ---------------- CONSTANTS ----------------
+FULL_SCALE_VOLTAGE = 4.096
+ADC_MAX = 32767
+RESISTOR = 160.0
+PRESSURE_RANGE = 10.0   # 0–10 bar
 
 # ---------------- SENSOR FUNCTIONS ----------------
 def read_raw_values():
@@ -74,21 +74,32 @@ def read_raw_values():
         return (0, 0, 0, 0)
 
 def convert_to_pressure(raw):
-    # Convert raw ADC value to pressure (0–10 bar example)
-    return round((raw / 32767) * 10, 2)
+    # Step 1: Raw -> Voltage
+    voltage = (raw / ADC_MAX) * FULL_SCALE_VOLTAGE
+
+    # Step 2: Voltage -> Current (mA)
+    current_mA = (voltage / RESISTOR) * 1000
+
+    # Step 3: 4–20mA -> Pressure
+    pressure = ((current_mA - 4) / 16) * PRESSURE_RANGE
+
+    # Clamp negative values
+    if pressure < 0:
+        pressure = 0
+
+    return round(pressure, 2)
 
 def get_pressures():
-    raw = read_raw_values()
-    pressures = tuple(convert_to_pressure(r) for r in raw)
-    return raw, pressures
+    raw_values = read_raw_values()
+    pressures = tuple(convert_to_pressure(r) for r in raw_values)
+    return raw_values, pressures
 
 # ---------------- MAIN LOOP ----------------
-print("\nSystem started... Logging data every 20 seconds\n", flush=True)
+print("\nSystem started... Logging every 10 seconds\n", flush=True)
 
 while True:
     raw_values, pressures = get_pressures()
 
-    # Fetch last row
     cursor.execute("""
         SELECT bp_pressure, fp_pressure, cr_pressure, bc_pressure
         FROM brake_pressure_log
@@ -97,7 +108,6 @@ while True:
     """)
     last = cursor.fetchone()
 
-    # Insert only if values changed >= 0.5 bar
     if not last or any(abs(n - l) >= 0.5 for n, l in zip(pressures, last)):
         cursor.execute("""
             INSERT INTO brake_pressure_log
@@ -106,7 +116,6 @@ while True:
         """, pressures)
         conn.commit()
 
-    # Print values
     print(
         f"RAW VALUES\n"
         f"BP:{raw_values[0]} | FP:{raw_values[1]} | "
