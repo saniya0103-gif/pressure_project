@@ -1,27 +1,24 @@
-# Use lightweight Python image (ARM compatible)
-FROM python:3.11-slim
+FROM arm64v8/python:3.11
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies (for ADS1115 & I2C support if needed)
+# Install Raspberry Pi system dependencies
 RUN apt-get update && apt-get install -y \
+    python3-dev \
     gcc \
-    libgpiod-dev \
+    g++ \
+    libgpiod2 \
     i2c-tools \
+    python3-rpi.gpio \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first (better caching)
+# Install pip packages
 COPY requirements.txt .
-
-# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy entire project
+# Copy project
 COPY . .
 
-# Create db folder inside container (if not mounted)
-RUN mkdir -p db
+RUN mkdir -p /app/db
 
-# Default command (will be overridden by docker-compose)
 CMD ["python", "System_capture1.py"]
