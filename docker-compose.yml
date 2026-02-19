@@ -12,11 +12,6 @@ services:
       - "/dev/i2c-1:/dev/i2c-1"
     volumes:
       - ./db:/app/db
-    environment:
-      - BLINKA_FORCEBOARD=RASPBERRY_PI_4
-      - BLINKA_FORCECHIP=BCM2711
-      - BLINKA_USE_RPI_GPIO=1
-      - PYTHONUNBUFFERED=1
     restart: always
 
   uploader_app:
