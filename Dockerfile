@@ -6,7 +6,6 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     gcc \
     g++ \
-    libgpiod2 \
     i2c-tools \
     && rm -rf /var/lib/apt/lists/*
 
