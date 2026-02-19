@@ -1,47 +1,27 @@
-# Use official slim Python 3.11 image
+# Use lightweight Python image (ARM compatible)
 FROM python:3.11-slim
 
-# -----------------------------
-# Install system dependencies
-# -----------------------------
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        i2c-tools \
-        python3-dev \
-        build-essential \
-        gcc \
-        git \
-        python3-pip \
-    && rm -rf /var/lib/apt/lists/*
-
-# -----------------------------
 # Set working directory
-# -----------------------------
 WORKDIR /app
 
-# -----------------------------
-# Upgrade pip
-# -----------------------------
-RUN python3 -m pip install --upgrade pip
+# Install system dependencies (for ADS1115 & I2C support if needed)
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libgpiod-dev \
+    i2c-tools \
+    && rm -rf /var/lib/apt/lists/*
 
-# -----------------------------
-# Copy requirements.txt first (cache optimization)
-# -----------------------------
-COPY requirements.txt /app/
+# Copy requirements first (better caching)
+COPY requirements.txt .
 
-# -----------------------------
 # Install Python dependencies
-# -----------------------------
-RUN python3 -m pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# -----------------------------
-# Copy project files
-# -----------------------------
-COPY . /app
+# Copy entire project
+COPY . .
 
-# -----------------------------
-# Blinka environment variables
-# -----------------------------
-ENV BLINKA_FORCEBOARD=RASPBERRY_PI_5
-ENV BLINKA_FORCECHIP=BCM2712
-ENV BLINKA_USE_RPI_GPIO=1
-ENV PYTHONUNBUFFERED=1
+# Create db folder inside container (if not mounted)
+RUN mkdir -p db
+
+# Default command (will be overridden by docker-compose)
+CMD ["python", "System_capture1.py"]
