@@ -4,22 +4,40 @@ import os
 import json
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 
-# ---------------- DEVICE CONFIG ----------------
-DEVICE_ID = "raspi_1"   # Keep constant per device
-CLIENT_ID = "Raspberry4_1"
-ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"
-TOPIC = "brake/data"
+# ================== DEVICE CONFIG ==================
+DEVICE_ID = "raspi_1"
+ENDPOINT = "YOUR_ENDPOINT_HERE"  # 🔴 Replace with your AWS IoT endpoint
 PORT = 8883
+TOPIC = "brake/data"
 
+# ================== CERTIFICATE PATH ==================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CERT_FOLDER = os.path.join(BASE_DIR, "certs")
 
-# ---------------- CERTIFICATE PATH ----------------
-ROOT_CA = os.path.join(BASE_DIR, "certs", "AmazonRootCA1.pem")
-PRIVATE_KEY = os.path.join(BASE_DIR, "certs", "private.pem.key")
-CERTIFICATE = os.path.join(BASE_DIR, "certs", "certificate.pem.crt")
+ROOT_CA = os.path.join(CERT_FOLDER, "AmazonRootCA1.pem")
+CERTIFICATE = os.path.join(CERT_FOLDER, "certificate.pem.crt")
+PRIVATE_KEY = os.path.join(CERT_FOLDER, "private.pem.key")
 
-# ---------------- MQTT CLIENT ----------------
-mqtt_client = AWSIoTMQTTClient(CLIENT_ID)
+# ================== DATABASE PATH ==================
+DB_PATH = os.path.join(BASE_DIR, "db", "new_db.db")
+
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
+
+print("🚀 Uploader Started...")
+
+# ================== ENSURE uploaded COLUMN ==================
+cur.execute("PRAGMA table_info(brake_pressure_log)")
+columns = [col[1] for col in cur.fetchall()]
+
+if "uploaded" not in columns:
+    print("➕ Adding 'uploaded' column...")
+    cur.execute("ALTER TABLE brake_pressure_log ADD COLUMN uploaded INTEGER DEFAULT 0")
+    conn.commit()
+
+# ================== AWS MQTT CLIENT ==================
+mqtt_client = AWSIoTMQTTClient(DEVICE_ID)
 mqtt_client.configureEndpoint(ENDPOINT, PORT)
 mqtt_client.configureCredentials(ROOT_CA, PRIVATE_KEY, CERTIFICATE)
 
@@ -28,29 +46,11 @@ mqtt_client.configureDrainingFrequency(2)
 mqtt_client.configureConnectDisconnectTimeout(10)
 mqtt_client.configureMQTTOperationTimeout(5)
 
-print("🔐 Connecting to AWS IoT...")
+print("🔌 Connecting to AWS IoT Core...")
 mqtt_client.connect()
-print("Connected to AWS IoT\n")
+print("✅ Connected Successfully!")
 
-# ---------------- DATABASE ----------------
-DB_PATH = os.path.join(BASE_DIR, "db", "new_db.db")
-
-conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-conn.row_factory = sqlite3.Row
-cur = conn.cursor()
-
-print("Uploader started...\n")
-
-# ---------------- ENSURE uploaded COLUMN EXISTS ----------------
-cur.execute("PRAGMA table_info(brake_pressure_log)")
-columns = [col[1] for col in cur.fetchall()]
-
-if "uploaded" not in columns:
-    print("Adding 'uploaded' column...")
-    cur.execute("ALTER TABLE brake_pressure_log ADD COLUMN uploaded INTEGER DEFAULT 0")
-    conn.commit()
-
-# ---------------- MAIN LOOP ----------------
+# ================== MAIN LOOP ==================
 while True:
 
     cur.execute("""
@@ -63,25 +63,27 @@ while True:
     row = cur.fetchone()
 
     if row:
+
+        payload = {
+            "Device_id": DEVICE_ID,
+            "timestamp": row["timestamp"],
+            "bp_raw": row["BP_raw"],
+            "bc_raw": row["BC_raw"],
+            "cr_raw": row["CR_raw"],
+            "fp_raw": row["FP_raw"]
+        }
+
         try:
-            payload = {
-                "device_id": DEVICE_ID,
-                "timestamp": row["timestamp"],
-                "bp": int(row["BP_raw"]),
-                "bc": int(row["BC_raw"]),
-                "fp": int(row["FP_raw"]),
-                "cr": int(row["CR_raw"])
-            }
-
-            print("📤 Sending Data:")
-            print(f"Device_id      = {DEVICE_ID}")
-            print(f"Timestamp      = {row['timestamp']}")
-            print(f"BP_raw         = {row['BP_raw']}")
-            print(f"BC_raw         = {row['BC_raw']}")
-            print(f"FP_raw         = {row['FP_raw']}")
-            print(f"CR_raw         = {row['CR_raw']}")
-
             mqtt_client.publish(TOPIC, json.dumps(payload), 1)
+
+            print("\n📤 Data Published to AWS")
+            print(f"Device_id = {DEVICE_ID}")
+            print(f"timestamp = {row['timestamp']}")
+            print(f"bp_raw = {row['BP_raw']}")
+            print(f"bc_raw = {row['BC_raw']}")
+            print(f"cr_raw = {row['CR_raw']}")
+            print(f"fp_raw = {row['FP_raw']}")
+            print("uploaded status: uploaded ✅")
 
             cur.execute(
                 "UPDATE brake_pressure_log SET uploaded = 1 WHERE id = ?",
@@ -89,13 +91,10 @@ while True:
             )
             conn.commit()
 
-            print("Uploaded Status = uploaded")
-            print("--------------------------------------------------\n")
-
         except Exception as e:
-            print("Publish Error:", e)
+            print("❌ Publish Failed:", e)
 
     else:
-        print("No data to upload\n")
+        print("⏳ No new data to upload...")
 
     time.sleep(2)
