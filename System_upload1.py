@@ -6,7 +6,7 @@ from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 
 # ================== DEVICE CONFIG ==================
 DEVICE_ID = "raspi_1"
-ENDPOINT = "YOUR_ENDPOINT_HERE"  # 🔴 Replace with your AWS IoT endpoint
+ENDPOINT = "amu2pa1jg3r4s-ats.iot.ap-south-1.amazonaws.com"  # 🔴 Replace with your AWS IoT endpoint
 PORT = 8883
 TOPIC = "brake/data"
 
