@@ -98,7 +98,7 @@ def connect_mqtt():
             time.sleep(2)
         except Exception as e:
             print("❌ MQTT connect failed:", e)
-            time.sleep(5)
+            time.sleep(0.5)
 
 connect_mqtt()
 
@@ -112,7 +112,7 @@ try:
         if not CONNECTED:
             print("⚠️ Not connected to MQTT, retrying...")
             connect_mqtt()
-            time.sleep(2)
+            time.sleep(0.5)
             continue
 
         cursor.execute("""
@@ -125,7 +125,7 @@ try:
         row = cursor.fetchone()
 
         if not row:
-            time.sleep(2)
+            time.sleep(0.5)
             continue
 
         id_, bp, fp, cr, bc, created_at = row
